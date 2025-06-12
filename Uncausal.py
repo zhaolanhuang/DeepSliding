@@ -55,4 +55,10 @@ def is_uncausal_module(mod):
     else:
         raise TypeError(f"Unreconized module type: {type(mod)}")
 
+# TODO: Impl
+def is_uncausal_function(func):
+    return False
 
+# TODO: Impl
+def is_uncausal_method(method):
+    return False
