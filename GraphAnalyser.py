@@ -6,6 +6,20 @@ from functools import reduce
 
 from Uncausal import is_uncausal_module, is_uncausal_function, is_uncausal_method
 
+from typing import NamedTuple, Optional
+
+from dataclasses import dataclass
+
+from utils import get_graph_node_by_name
+
+@dataclass
+class SSMMetadata:
+    is_causal: bool
+    is_causal_breaker: bool
+    is_global_pooling: bool
+    tensor_meta_time_step: Optional[fx.passes.shape_prop.TensorMetadata]
+
+
 # TODO: suport iteratively analyse customize modules inside the model
 
 
@@ -65,6 +79,8 @@ class GraphAnalyser:
         self._traced_mod.graph.print_tabular()
         self._uncausal_nodes = find_uncausal_nodes(self._traced_mod.graph, self._named_modules)
         self._uncausal_nodes = self.get_all_uncausal_successors_of_uncausal_nodes()
+
+        self.init_ssm_metadata_of_nodes()
         self.mark_causality_of_nodes()
 
         self._input_shape = input_shape
@@ -74,9 +90,40 @@ class GraphAnalyser:
 
         self.capture_shape_info_with_time_step_size()
 
-        print(self.find_causal_breaker())
+        self._causal_breaker = self.find_causal_breaker()
 
-        
+        print(self._causal_breaker)
+
+        self.mark_global_pooling_of_nodes()
+
+    
+    @property
+    def traced_mod(self):
+        return self._traced_mod
+
+    @property
+    def traced_mod_with_time_step(self):
+        return self._traced_mod_time_step
+
+    @property
+    def traced_graph(self):
+        return self._traced_mod.graph
+
+    @property
+    def traced_graph_with_time_step(self):
+        return self._traced_mod_time_step.graph
+    
+    @property
+    def causal_breaker(self):
+        return self._causal_breaker
+    
+    @property
+    def named_modules(self):
+        return self._named_modules
+    
+    def init_ssm_metadata_of_nodes(self):
+        for n in self._traced_mod.graph.nodes:
+            n.meta["ssm_meta"] = SSMMetadata(False, False, False, None)
 
     # find the nodes that breaks causality from the uncausal nodes
     def find_causal_breaker(self):
@@ -87,6 +134,7 @@ class GraphAnalyser:
                                         inp_causality)
             if is_all_inp_causal:
                 causal_breaker.append(n)
+                n.meta['ssm_meta'].is_causal_breaker = True
         return causal_breaker
 
 
@@ -105,7 +153,7 @@ class GraphAnalyser:
         try:
             fx.passes.shape_prop.ShapeProp(self._traced_mod_time_step).propagate(sample_input)
         except RuntimeError as e:
-            print("Stop by Ops needed for complete input shape", e)
+            print("Stop by Ops needed for complete input shape")
         finally:
             pass
 
@@ -113,6 +161,8 @@ class GraphAnalyser:
             if "tensor_meta" in node.meta:
                 print(node.name, node.meta['tensor_meta'].dtype,
                     node.meta['tensor_meta'].shape)
+                ori_node = get_graph_node_by_name(self._traced_mod.graph, node.name)
+                ori_node.meta['ssm_meta'].tensor_meta_time_step = node.meta['tensor_meta']
             else:
                 node.meta['tensor_meta'] = None
 
@@ -128,8 +178,23 @@ class GraphAnalyser:
         for n in self._traced_mod.graph.nodes:
             if n in self._uncausal_nodes:
                 n.meta['causal'] = False
+                n.meta['ssm_meta'].is_causal = False
             else:
                 n.meta['causal'] = True
+                n.meta['ssm_meta'].is_causal = True
+
+    def mark_global_pooling_of_nodes(self):
+        for n in self._traced_mod.graph.nodes:
+            if n.op != "call_module":
+                continue
+            op_mod = self._named_modules[n.target]
+            if isinstance(op_mod, nn.AvgPool1d | nn.MaxPool1d):
+                input_s = n.meta['tensor_meta'].shape[-1]
+                kernel_size = op_mod.kernel_size
+                if input_s == kernel_size:
+                    n.meta['ssm_meta'].is_global_pooling = True
+                else:
+                    n.meta['ssm_meta'].is_global_pooling = False
 
 
 
