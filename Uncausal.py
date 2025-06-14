@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 #record torch methods/functions/modules that break the causality
-
+# TODO: or shall we rename it causal breaker instead?
 UNCAUSAL_MODULE_NAMES = [
     
     #MLP on Time axis

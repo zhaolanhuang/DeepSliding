@@ -2,14 +2,26 @@ import torch
 import torch.nn as nn
 import torch.fx as fx
 
-from GraphAnalyser import GraphAnalyser
+from GraphAnalyser import GraphAnalyser, SSMMetadata
+
+from OpsToSSM import ops_to_ssm
 
 from utils import get_graph_node_by_target
 
 SSMABLE_OP_NAMES = [
-    "Conv1D",
-    "Average"
+    "Conv1d",
+    "AvgPool1d",
+    "MaxPool1d",
+    "Flatten"
 ]
+
+def is_ssm_able(op_mod):
+    if isinstance(op_mod, str):
+        return (op_mod in SSMABLE_OP_NAMES)
+    elif isinstance(op_mod, nn.Module):
+        return type(op_mod).__name__ in SSMABLE_OP_NAMES
+    else:
+        raise TypeError(f"Unreconized module type: {type(op_mod)}")
 
 class GraphTransformer(fx.Transformer):
     def __init__(self, torch_mod: nn.Module, input_shape, time_step_size: int):
@@ -26,9 +38,21 @@ class GraphTransformer(fx.Transformer):
     def call_method(self, target, args, kwargs):
         return super().call_method(target, args, kwargs)
     
-    def call_module(self, target, args, kwargs):
+    def call_module(self, target: str, args, kwargs):
         node: fx.Node = get_graph_node_by_target(self._traced_mod.graph, target)
-        print(node.meta['ssm_meta'])
+        if target.endswith("_ssm"):
+            return super().call_module(target, args, kwargs)
+        ssm_meta : SSMMetadata = node.meta['ssm_meta']
+        op_mod = self.fetch_attr(target)
+        tensor_meta = node.meta['tensor_meta']
+        print(node.target, node.meta['ssm_meta'])
+
+        if ssm_meta.is_causal and is_ssm_able(op_mod):
+            new_ssm_mod = ops_to_ssm(op_mod, tensor_meta.shape[:-1])
+            new_name = target + "_ssm"
+            self._traced_mod.add_submodule(new_name, new_ssm_mod)
+            return self.call_module(new_name, args, kwargs)
+
         return super().call_module(target, args, kwargs)
     
 
@@ -67,4 +91,5 @@ if __name__ == "__main__":
             return x
 
     graph_transformer = GraphTransformer(MyModel(), [40, 40], 10)
-    graph_transformer.transform()
+    new_g = graph_transformer.transform()
+    print(new_g)

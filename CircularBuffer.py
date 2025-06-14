@@ -7,8 +7,9 @@ class CircularBuffer(nn.Module):
         super().__init__()
         self.buffer_size = buffer_size
         self.latent_dim = latent_dim
+        print(buffer_size)
         if self.latent_dim is not None:
-            self.register_buffer('buffer', torch.zeros(( [*self.latent_dim, self.buffer_size]), dtype=x.dtype, device=x.device))
+            self.register_buffer('buffer', torch.zeros(( [*self.latent_dim, self.buffer_size])))
 
     # 1D: (C, T) scheme, 2D: (C,H,W,T) scheme -> (Latent_DIM, T) scheme, T for time axis
     # Input: (C, 1) or (C, H, W, 1) -> point-by-point along time
