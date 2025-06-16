@@ -153,7 +153,7 @@ class GraphAnalyser:
         try:
             fx.passes.shape_prop.ShapeProp(self._traced_mod_time_step).propagate(sample_input)
         except RuntimeError as e:
-            print("Stop by Ops needed for complete input shape")
+            print("Stop by Ops needed for complete input shape", str(e))
         finally:
             pass
 

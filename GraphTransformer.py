@@ -8,6 +8,8 @@ from OpsToSSM import ops_to_ssm
 
 from utils import get_graph_node_by_target
 
+from SSMOperator import WaitForNextInputError
+
 SSMABLE_OP_NAMES = [
     "Conv1d",
     "AvgPool1d",
@@ -44,16 +46,27 @@ class GraphTransformer(fx.Transformer):
             return super().call_module(target, args, kwargs)
         ssm_meta : SSMMetadata = node.meta['ssm_meta']
         op_mod = self.fetch_attr(target)
-        tensor_meta = node.meta['tensor_meta']
+        out_tensor_meta = node.meta['tensor_meta']
+        in_tensor_meta = node.all_input_nodes[0].meta['tensor_meta']
         print(node.target, node.meta['ssm_meta'])
 
         if ssm_meta.is_causal and is_ssm_able(op_mod):
-            new_ssm_mod = ops_to_ssm(op_mod, tensor_meta.shape[:-1])
+            new_ssm_mod = ops_to_ssm(op_mod, in_tensor_meta.shape[:-1])
             new_name = target + "_ssm"
             self._traced_mod.add_submodule(new_name, new_ssm_mod)
             return self.call_module(new_name, args, kwargs)
-
+        elif ssm_meta.is_causal_breaker and is_ssm_able(op_mod):
+            if isinstance(op_mod, nn.Flatten):
+                latent_dim = in_tensor_meta.shape[:-1]
+                num_latent = in_tensor_meta.shape[-1]
+                new_ssm_mod = ops_to_ssm(op_mod, latent_dim, num_latent, 1)
+                new_name = target + "_ssm"
+                self._traced_mod.add_submodule(new_name, new_ssm_mod)
+                return self.call_module(new_name, args, kwargs)
         return super().call_module(target, args, kwargs)
+    
+    def inference_causal_breaker_ssm_params(self):
+        pass
     
 
 
@@ -70,7 +83,7 @@ if __name__ == "__main__":
     class MyModel(nn.Module):
         def __init__(self):
             super().__init__()
-            self.conv1 = nn.Conv1d(40, 4, kernel_size=3)
+            self.conv1 = nn.Conv1d(10, 4, kernel_size=3)
             self.relu = nn.ReLU()
             self.conv2 = nn.Conv1d(4, 4, kernel_size=3)
             self.conv3 = nn.Conv1d(4, 4, kernel_size=3)
@@ -80,16 +93,30 @@ if __name__ == "__main__":
 
         def forward(self, x):
             x = self.conv1(x)
+            print(x)
             x2 = self.relu(x)
             x = self.called_mod(x2)
             x = self.conv2(x)
             x = self.conv3(x)
             x = self.flatten1(x)
+            print(x)
             x1 = x * 2
             x += x1
             x = self.linear1(x)
             return x
-
-    graph_transformer = GraphTransformer(MyModel(), [40, 40], 10)
+    x = torch.randn(10, 40)
+    print("input x:", x)
+    ori_mod = MyModel()
+    graph_transformer = GraphTransformer(ori_mod, [10, 40], 10)
     new_g = graph_transformer.transform()
-    print(new_g)
+    
+    y = ori_mod(x)
+    for i in range(40):
+        try:
+            y_iter = new_g(x[..., i:i+1])
+            # print(y_iter)
+        except WaitForNextInputError as e:
+            pass
+        finally:
+            pass
+    print(y, y_iter)
