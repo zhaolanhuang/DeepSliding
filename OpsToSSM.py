@@ -3,11 +3,11 @@ import torch.nn as nn
 from SSMOperator import SSMOperator
 
 
-def ops_to_ssm(op_mod, latent_dim, num_latent_state=None, time_stride=None):
+def ops_to_ssm(op_mod, latent_dim, num_latent_state=None, time_stride=None, ssm_cls=SSMOperator):
     if num_latent_state is None or time_stride is None:
         num_latent_state, time_stride = inference_ssm_params(op_mod)
     
-    return SSMOperator(op_mod, num_latent_state, latent_dim, time_stride)
+    return ssm_cls(op_mod, num_latent_state, latent_dim, time_stride)
 
 def inference_ssm_params(op_mod):
     num_s = None

@@ -8,7 +8,9 @@ from OpsToSSM import ops_to_ssm
 
 from utils import get_graph_node_by_target
 
-from SSMOperator import WaitForNextInputError
+from SSMOperator import WaitForNextInputError, SSMOperator
+
+from SSMFakeOperator import SSMFakeOperator
 
 SSMABLE_OP_NAMES = [
     "Conv1d",
@@ -25,14 +27,24 @@ def is_ssm_able(op_mod):
     else:
         raise TypeError(f"Unreconized module type: {type(op_mod)}")
 
-class GraphTransformer(fx.Transformer):
-    def __init__(self, torch_mod: nn.Module, input_shape, time_step_size: int):
-        
-        self._analyser = GraphAnalyser(torch_mod, input_shape, time_step_size)
+class GraphTransformer(fx.Transformer):    
+    def __init__(self, analyser: GraphAnalyser, is_fake_ssm=False):
+        self._analyser = analyser
         self._traced_mod = self._analyser.traced_mod
         self._traced_mod_ts = self._analyser.traced_mod_with_time_step
         self._causal_breaker = self._analyser.causal_breaker
+        if is_fake_ssm:
+            self._ssm_op_cls = SSMFakeOperator
+        else:
+            self._ssm_op_cls = SSMOperator
         super().__init__(self._traced_mod)
+
+    @classmethod
+    def from_torch_module(cls, torch_mod: nn.Module, input_shape, time_step_size: int, is_fake_ssm=False):
+        return cls(GraphAnalyser(torch_mod, input_shape, time_step_size), is_fake_ssm)
+
+    def ops_to_ssm(self, op_mod, latent_dim, num_latent_state=None, time_stride=None):
+        return ops_to_ssm(op_mod, latent_dim, num_latent_state, time_stride, self._ssm_op_cls)
 
     def call_function(self, target, args, kwargs):
         return super().call_function(target, args, kwargs)
@@ -51,7 +63,7 @@ class GraphTransformer(fx.Transformer):
         print(node.target, node.meta['ssm_meta'])
 
         if ssm_meta.is_causal and is_ssm_able(op_mod):
-            new_ssm_mod = ops_to_ssm(op_mod, in_tensor_meta.shape[:-1])
+            new_ssm_mod = self.ops_to_ssm(op_mod, in_tensor_meta.shape[:-1])
             new_name = target + "_ssm"
             self._traced_mod.add_submodule(new_name, new_ssm_mod)
             return self.call_module(new_name, args, kwargs)
@@ -59,7 +71,7 @@ class GraphTransformer(fx.Transformer):
             if isinstance(op_mod, nn.Flatten):
                 latent_dim = in_tensor_meta.shape[:-1]
                 num_latent = in_tensor_meta.shape[-1]
-                new_ssm_mod = ops_to_ssm(op_mod, latent_dim, num_latent, 1)
+                new_ssm_mod = self.ops_to_ssm(op_mod, latent_dim, num_latent, 1)
                 new_name = target + "_ssm"
                 self._traced_mod.add_submodule(new_name, new_ssm_mod)
                 return self.call_module(new_name, args, kwargs)
@@ -83,7 +95,7 @@ if __name__ == "__main__":
     class MyModel(nn.Module):
         def __init__(self):
             super().__init__()
-            self.conv1 = nn.Conv1d(10, 4, kernel_size=3)
+            self.conv1 = nn.Conv1d(50, 4, kernel_size=3)
             self.relu = nn.ReLU()
             self.conv2 = nn.Conv1d(4, 4, kernel_size=3)
             self.conv3 = nn.Conv1d(4, 4, kernel_size=3)
@@ -93,30 +105,27 @@ if __name__ == "__main__":
 
         def forward(self, x):
             x = self.conv1(x)
-            print(x)
             x2 = self.relu(x)
             x = self.called_mod(x2)
             x = self.conv2(x)
             x = self.conv3(x)
             x = self.flatten1(x)
-            print(x)
             x1 = x * 2
             x += x1
             x = self.linear1(x)
             return x
-    x = torch.randn(10, 40)
-    print("input x:", x)
+    x = torch.randn(50, 40)
     ori_mod = MyModel()
-    graph_transformer = GraphTransformer(ori_mod, [10, 40], 10)
+    graph_transformer = GraphTransformer.from_torch_module(ori_mod, [50, 40], 10)
     new_g = graph_transformer.transform()
     
     y = ori_mod(x)
     for i in range(40):
         try:
             y_iter = new_g(x[..., i:i+1])
-            # print(y_iter)
         except WaitForNextInputError as e:
             pass
         finally:
             pass
-    print(y, y_iter)
+    assert torch.allclose(y, y_iter)
+    print("Result allclose!")

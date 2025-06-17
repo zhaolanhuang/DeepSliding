@@ -22,9 +22,9 @@ class SSMOperator(nn.Module):
         x = self._cir_buffer(x)
         self._current_filled_latent_state += 1
         if self._current_filled_latent_state >= self._num_of_latent_state:
-            print("cir buf:", x)
+            # print("cir buf:", x)
             x = self._wrapped_operator(x)
-            print(self._wrapped_operator, x)
+            # print(self._wrapped_operator, x)
             self._current_filled_latent_state -= self._stride
         else:
             raise WaitForNextInputError()

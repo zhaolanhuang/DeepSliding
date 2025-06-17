@@ -7,7 +7,7 @@ class CircularBuffer(nn.Module):
         super().__init__()
         self.buffer_size = buffer_size
         self.latent_dim = latent_dim
-        print(buffer_size)
+        # print(buffer_size)
         # if self.latent_dim is not None:
         #     self.register_buffer('buffer', torch.zeros(( [*self.latent_dim, self.buffer_size])))
         self.buffer = torch.zeros(( [*self.latent_dim, self.buffer_size]))
@@ -20,6 +20,6 @@ class CircularBuffer(nn.Module):
         #     self.latent_dim = x.shape[0:-1]
         #     self.register_buffer('buffer', torch.zeros(( [*self.latent_dim, self.buffer_size]), dtype=x.dtype, device=x.device))
         self.buffer[..., 0:-1] = self.buffer[..., 1:]
-        print(self.buffer.shape, x.shape)
+        # print(self.buffer.shape, x.shape)
         self.buffer[..., -1] = x[..., -1]
         return self.buffer
