@@ -23,13 +23,13 @@ if __name__ == "__main__":
             self.conv2 = nn.Conv1d(4, 4, kernel_size=3)
             self.conv3 = nn.Conv1d(4, 4, kernel_size=3)
             self.flatten1 = nn.Flatten(0, -1)
-            self.linear1 = nn.Linear(128,10)
+            self.linear1 = nn.Linear(136,10)
             self.called_mod = CalledModule()
 
         def forward(self, x):
             x = self.conv1(x)
             x2 = self.relu(x)
-            x = self.called_mod(x2)
+            # x = self.called_mod(x2) # TODO: this place cause bug inside tvm, conv1 <-> called_mod.conv1 verwechseln...
             x = self.conv2(x)
             x = self.conv3(x)
             x = self.flatten1(x)

@@ -25,6 +25,7 @@ class SSMFakeOperator(nn.Module):
     def __init__(self, wrapped_operator: nn.Module, num_of_latent_state, latent_dim, stride):
         super().__init__()
         self._wrapped_operator = wrapped_operator
+        print(wrapped_operator)
         self._latent_dim = latent_dim
         self._num_of_latent_state = num_of_latent_state
         self._stride = stride

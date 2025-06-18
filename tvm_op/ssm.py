@@ -23,6 +23,7 @@ relay.op.op.register("ssm")
 def _rel(args, attrs):
     # func = attrs["relay_func"]
     # return relay.TupleType([relay.TensorType(attrs["output_shape"], args[1].dtype), relay.TensorType(func.body.checked_type.shape,func.body.checked_type.dtype)])
+    print("SSM Type REL:", args[1])
     return args[1]
 _op.get(op_name).add_type_rel("SSMTypeRel", _rel) # -> Key for TypeInference
 
@@ -33,8 +34,9 @@ _op.register_stateful(op_name, True)
 
 def ssm(x, num_of_latent_state, latent_dim, stride):
     latent_state_shape = tuple([*latent_dim, num_of_latent_state])
-    latent_state = relay.var("ssm_latent_state_var", shape=latent_state_shape, dtype=x.dtype)
+    latent_state = relay.var("ssm_latent_state_var", shape=latent_state_shape) # TODO: add type inference
     current_idx = relay.var("ssm_cur_idx", shape=(1,), dtype="int32")
+  
 
     attrs = tvm.ir.make_node("DictAttrs", num_of_latent_state=num_of_latent_state, 
                             latent_dim=latent_dim, stride=stride, latent_state_shape=latent_state_shape)
@@ -60,65 +62,125 @@ def _compute(attrs, inputs, output_type):
     
     data, latent_state, current_idx = inputs
 
-    max_idx = attrs["max_idx"]
-    buffer_shape = attrs["buffer_shape"]
-    kernel_size = attrs["conv_kernel_size"]
-    strides = attrs["conv_strides"]
-    padding = attrs["conv_padding"]
-    input_shape = attrs["conv_input_shape"]
-    
-    print("kernel_size:", kernel_size)
-    print("input_shape:", input_shape)
-    print("padding:", padding)
-    print("strides:", strides)
-    worker_id = get_fusion_worker_id()
-    cur_op_num = get_fusion_op_num()
-    print("worker_id:", worker_id, "op_num:", cur_op_num)
+    num_of_latent_state = attrs["num_of_latent_state"]
+    latent_dim = attrs["latent_dim"]
+    stride = attrs["stride"]
+    latent_state_shape = attrs["latent_state_shape"]
 
-    def gen_ib(data_buf, buffer_var_buf, current_idx_buf, out_buf):
+    def gen_ib_4d(data_buf, buffer_var_buf, current_idx_buf, out_buf):
         ib = tvm.tir.ir_builder.create()
-        ib.emit(invoke_c_macro(INSERT_STUB, worker_id, cur_op_num))
-        ib.emit(invoke_c_macro(DECLEAR_EXTERN_WAIT_FOR_VAR, worker_id))
-        ib.emit(invoke_c_macro(CHECK_IF_SKIP_COMPUTE, worker_id, cur_op_num, cur_op_num+1))
-        data_w = data_buf.shape[3]
         data = ib.buffer_ptr(data_buf)
         buffer = ib.buffer_ptr(buffer_var_buf)
         cur_idx = ib.buffer_ptr(current_idx_buf)
         out = ib.buffer_ptr(out_buf)
         #shrift elements inside buffer
-        # with ib.for_range(0 , buffer_shape[0], "n") as n: # begin of for loop has to be zero for c codegen...
-        #     with ib.for_range(0,  buffer_shape[1], "i") as i:
-        #         with ib.for_range(0, buffer_shape[2], "j") as j:
-        #             with ib.for_range(0, buffer_shape[3] - data_w, "k") as k:
-        #                 buffer[n , i , j , k] = buffer[n, i , j , k + data_w]
-
+        with ib.for_range(0 , latent_state_shape[0], "n") as n: # begin of for loop has to be zero for c codegen...
+            with ib.for_range(0,  latent_state_shape[1], "i") as i:
+                with ib.for_range(0, latent_state_shape[2], "j") as j:
+                    with ib.for_range(0, latent_state_shape[3] - 1, "k") as k:
+                        buffer[n , i , j , k] = buffer[n, i , j , k + 1]
         # Copy new data to buffer
-        with ib.for_range(0 , buffer_shape[0], "n") as n: # begin of for loop has to be zero for c codegen...
-            with ib.for_range(0,  buffer_shape[1], "i") as i:
-                with ib.for_range(0, buffer_shape[2], "j") as j:
-                    with ib.for_range(0, data_w, "k") as k:
-                        buffer[n , i , j , cur_idx[3] % (buffer_shape[3] - data_w + k)] = data[n, i , j , k]
+        with ib.for_range(0 , latent_state_shape[0], "n") as n: # begin of for loop has to be zero for c codegen...
+            with ib.for_range(0,  latent_state_shape[1], "i") as i:
+                with ib.for_range(0, latent_state_shape[2], "j") as j:
+                    with ib.for_range(0, 1, "k") as k:
+                        buffer[n , i , j , latent_state_shape[3] - 1 - k] = data[n, i , j , k]
 
-        cur_idx[3] = cur_idx[3] + data_w
+        cur_idx[0] = cur_idx[0] + 1
 
-        with ib.if_scope(tvm.tir.all((cur_idx[3] + 1) >= kernel_size[1], ((cur_idx[3] + 1 - kernel_size[1]) % strides[1]) == 0)):
+        with ib.if_scope(cur_idx[0] >= num_of_latent_state):
             # copy to Output buffer
-            with ib.for_range(0 , buffer_shape[0], "n") as n: # begin of for loop has to be zero for c codegen...
-                with ib.for_range(0,  buffer_shape[1], "i") as i:
-                    with ib.for_range(0, buffer_shape[2], "j") as j:
-                        with ib.for_range(0, buffer_shape[3], "k") as k:
+            with ib.for_range(0 , latent_state_shape[0], "n") as n: # begin of for loop has to be zero for c codegen...
+                with ib.for_range(0,  latent_state_shape[1], "i") as i:
+                    with ib.for_range(0, latent_state_shape[2], "j") as j:
+                        with ib.for_range(0, latent_state_shape[3], "k") as k:
                             out[n , i , j , k] = buffer[n, i , j , k]
+            cur_idx[0] = cur_idx[0] - stride
 
         with ib.else_scope():
             # skip output
             ib.emit(tvm.tir.ret(-1))
-
         return ib.get()
-    out_ib = [tvm.te.extern(output_type.shape, [data, buffer_var, current_idx],
-              lambda ins, outs: gen_ib(ins[0], ins[1], ins[2], outs[0]),
-            name=op + "_compute.generic", 
-            dtype=output_type.dtype,
-            )]
+
+    def gen_ib_3d(data_buf, buffer_var_buf, current_idx_buf, out_buf):
+        ib = tvm.tir.ir_builder.create()
+        data = ib.buffer_ptr(data_buf)
+        buffer = ib.buffer_ptr(buffer_var_buf)
+        cur_idx = ib.buffer_ptr(current_idx_buf)
+        out = ib.buffer_ptr(out_buf)
+        #shrift elements inside buffer
+        with ib.for_range(0 , latent_state_shape[0], "n") as n: # begin of for loop has to be zero for c codegen...
+            with ib.for_range(0,  latent_state_shape[1], "i") as i:
+                with ib.for_range(0, latent_state_shape[2] - 1, "k") as k:
+                    buffer[n , i, k] = buffer[n, i, k + 1]
+        # Copy new data to buffer
+        with ib.for_range(0 , latent_state_shape[0], "n") as n: # begin of for loop has to be zero for c codegen...
+            with ib.for_range(0,  latent_state_shape[1], "i") as i:
+                with ib.for_range(0, 1, "k") as k:
+                    buffer[n , i , latent_state_shape[2] - 1 - k] = data[n, i , k]
+
+        cur_idx[0] = cur_idx[0] + 1
+
+        with ib.if_scope(cur_idx[0] >= num_of_latent_state):
+            # copy to Output buffer
+            with ib.for_range(0 , latent_state_shape[0], "n") as n: # begin of for loop has to be zero for c codegen...
+                with ib.for_range(0,  latent_state_shape[1], "i") as i:
+                    with ib.for_range(0, latent_state_shape[2], "k") as k:
+                        out[n , i , k] = buffer[n, i , k]
+            cur_idx[0] = cur_idx[0] - stride
+
+        with ib.else_scope():
+            # skip output
+            ib.emit(tvm.tir.ret(-1))
+        return ib.get()
+
+    def gen_ib_2d(data_buf, buffer_var_buf, current_idx_buf, out_buf):
+        ib = tvm.tir.ir_builder.create()
+        data = ib.buffer_ptr(data_buf)
+        buffer = ib.buffer_ptr(buffer_var_buf)
+        cur_idx = ib.buffer_ptr(current_idx_buf)
+        out = ib.buffer_ptr(out_buf)
+        #shrift elements inside buffer
+        with ib.for_range(0 , latent_state_shape[0], "n") as n: # begin of for loop has to be zero for c codegen...
+            with ib.for_range(0, latent_state_shape[1] - 1, "k") as k:
+                buffer[n , k] = buffer[n, k + 1]
+        # Copy new data to buffer
+        with ib.for_range(0 , latent_state_shape[0], "n") as n: # begin of for loop has to be zero for c codegen...
+            with ib.for_range(0, 1, "k") as k:
+                buffer[n , latent_state_shape[1] - 1 - k] = data[n, k]
+
+        cur_idx[0] = cur_idx[0] + 1
+
+        with ib.if_scope(cur_idx[0] >= num_of_latent_state):
+            # copy to Output buffer
+            with ib.for_range(0 , latent_state_shape[0], "n") as n: # begin of for loop has to be zero for c codegen...
+                with ib.for_range(0, latent_state_shape[1], "k") as k:
+                    out[n , k] = buffer[n, k]
+            cur_idx[0] = cur_idx[0] - stride
+
+        with ib.else_scope():
+            # skip output
+            ib.emit(tvm.tir.ret(-1))
+        return ib.get()
+    
+    if len(latent_state_shape) == 4:
+        out_ib = [tvm.te.extern(output_type.shape, [data, buffer_var, current_idx],
+                lambda ins, outs: gen_ib_4d(ins[0], ins[1], ins[2], outs[0]),
+                name=op + "_compute.generic", 
+                dtype=output_type.dtype,
+                )]
+    elif len(latent_state_shape) == 3:
+        out_ib = [tvm.te.extern(output_type.shape, [data, buffer_var, current_idx],
+                lambda ins, outs: gen_ib_3d(ins[0], ins[1], ins[2], outs[0]),
+                name=op + "_compute.generic", 
+                dtype=output_type.dtype,
+                )]
+    elif len(latent_state_shape) == 2:
+        out_ib = [tvm.te.extern(output_type.shape, [data, buffer_var, current_idx],
+                lambda ins, outs: gen_ib_2d(ins[0], ins[1], ins[2], outs[0]),
+                name=op + "_compute.generic", 
+                dtype=output_type.dtype,
+                )]
     return out_ib
 
 @override_native_generic_func(op_name + "_strategy")
