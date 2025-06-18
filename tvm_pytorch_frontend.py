@@ -43,4 +43,4 @@ def load_model(model_path: str, shape_dict=None):
 
 if __name__ == "__main__":
     mod, params = load_model('./DeepSliding/torchscrpited_model.pth', {'input': (50, 1)})
-    breakpoint()
+    print(mod)
