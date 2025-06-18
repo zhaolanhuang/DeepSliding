@@ -4,13 +4,13 @@ import torch.fx as fx
 
 from functools import reduce
 
-from Uncausal import is_uncausal_module, is_uncausal_function, is_uncausal_method
+from .Uncausal import is_uncausal_module, is_uncausal_function, is_uncausal_method
 
 from typing import NamedTuple, Optional
 
 from dataclasses import dataclass
 
-from utils import get_graph_node_by_name
+from .utils import get_graph_node_by_name
 
 @dataclass
 class SSMMetadata:

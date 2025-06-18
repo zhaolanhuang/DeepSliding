@@ -11,8 +11,8 @@ from tvm.driver import tvmc
 from tvm.driver.tvmc.frontends import guess_frontend, PyTorchFrontend
 import inspect
 
-from SSMFakeOperator import SSMFakeOperator
-from tvm_op.ssm import ssm
+from .SSMFakeOperator import SSMFakeOperator
+from .tvm_op.ssm import ssm
 
 def ssm_fake_op(inputs, input_types):
     data = inputs[0]
@@ -42,5 +42,5 @@ def load_model(model_path: str, shape_dict=None):
     return model.mod, model.params
 
 if __name__ == "__main__":
-    mod, params = load_model('torchscrpited_model.pth', {'input': (50, 1)})
+    mod, params = load_model('./DeepSliding/torchscrpited_model.pth', {'input': (50, 1)})
     breakpoint()

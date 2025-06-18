@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
 
-from GraphTransformer import GraphTransformer
-from GraphAnalyser import GraphAnalyser
+from .GraphTransformer import GraphTransformer
+from .GraphAnalyser import GraphAnalyser
 
 
 if __name__ == "__main__":
@@ -46,4 +46,4 @@ if __name__ == "__main__":
 
     scripted_model = torch.jit.trace(new_g, x, check_trace=True).eval()
     print(scripted_model.inlined_graph)
-    scripted_model.save("torchscrpited_model.pth")
+    scripted_model.save("./DeepSliding/torchscrpited_model.pth")

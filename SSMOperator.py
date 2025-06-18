@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from CircularBuffer import CircularBuffer
+from .CircularBuffer import CircularBuffer
 
 class WaitForNextInputError(Exception):
     pass

@@ -2,15 +2,15 @@ import torch
 import torch.nn as nn
 import torch.fx as fx
 
-from GraphAnalyser import GraphAnalyser, SSMMetadata
+from .GraphAnalyser import GraphAnalyser, SSMMetadata
 
-from OpsToSSM import ops_to_ssm
+from .OpsToSSM import ops_to_ssm
 
-from utils import get_graph_node_by_target
+from .utils import get_graph_node_by_target
 
-from SSMOperator import WaitForNextInputError, SSMOperator
+from .SSMOperator import WaitForNextInputError, SSMOperator
 
-from SSMFakeOperator import SSMFakeOperator
+from .SSMFakeOperator import SSMFakeOperator
 
 SSMABLE_OP_NAMES = [
     "Conv1d",

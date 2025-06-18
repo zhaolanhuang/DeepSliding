@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from SSMOperator import SSMOperator
+from .SSMOperator import SSMOperator
 
 
 def ops_to_ssm(op_mod, latent_dim, num_latent_state=None, time_stride=None, ssm_cls=SSMOperator):
