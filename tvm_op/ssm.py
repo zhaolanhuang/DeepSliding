@@ -23,7 +23,7 @@ relay.op.op.register("ssm")
 def _rel(args, attrs):
     # func = attrs["relay_func"]
     # return relay.TupleType([relay.TensorType(attrs["output_shape"], args[1].dtype), relay.TensorType(func.body.checked_type.shape,func.body.checked_type.dtype)])
-    print("SSM Type REL:", args[1])
+    # print("SSM Type REL:", args[1])
     return args[1]
 _op.get(op_name).add_type_rel("SSMTypeRel", _rel) # -> Key for TypeInference
 
@@ -32,11 +32,15 @@ _op.get(op_name).set_support_level(1)
 _op.register_pattern(op_name, _op.OpPattern.ELEMWISE)
 _op.register_stateful(op_name, True)
 
+# Avoid name conflictsin C Code
+_identifier_idx = 1
+
 def ssm(x, num_of_latent_state, latent_dim, stride):
+    global _identifier_idx
     latent_state_shape = tuple([*latent_dim, num_of_latent_state])
-    latent_state = relay.var("ssm_latent_state_var", shape=latent_state_shape) # TODO: add type inference
-    current_idx = relay.var("ssm_cur_idx", shape=(1,), dtype="int32")
-  
+    latent_state = relay.var(f"ssm_latent_state_var_{_identifier_idx}", shape=latent_state_shape) # TODO: add type inference
+    current_idx = relay.var(f"ssm_cur_idx_{_identifier_idx}", shape=(1,), dtype="int32")
+    _identifier_idx += 1 
 
     attrs = tvm.ir.make_node("DictAttrs", num_of_latent_state=num_of_latent_state, 
                             latent_dim=latent_dim, stride=stride, latent_state_shape=latent_state_shape)
@@ -58,7 +62,7 @@ from tvm.topi import utils
 
 @relay.op.op.register_compute(op_name)
 def _compute(attrs, inputs, output_type):
-    print("We are now at cache_conv_input_compute")  
+    print("We are now at ssm_compute")  
     
     data, latent_state, current_idx = inputs
 
@@ -164,21 +168,21 @@ def _compute(attrs, inputs, output_type):
         return ib.get()
     
     if len(latent_state_shape) == 4:
-        out_ib = [tvm.te.extern(output_type.shape, [data, buffer_var, current_idx],
+        out_ib = [tvm.te.extern(output_type.shape, [data, latent_state, current_idx],
                 lambda ins, outs: gen_ib_4d(ins[0], ins[1], ins[2], outs[0]),
-                name=op + "_compute.generic", 
+                name=op_name + "_compute.generic", 
                 dtype=output_type.dtype,
                 )]
     elif len(latent_state_shape) == 3:
-        out_ib = [tvm.te.extern(output_type.shape, [data, buffer_var, current_idx],
+        out_ib = [tvm.te.extern(output_type.shape, [data, latent_state, current_idx],
                 lambda ins, outs: gen_ib_3d(ins[0], ins[1], ins[2], outs[0]),
-                name=op + "_compute.generic", 
+                name=op_name + "_compute.generic", 
                 dtype=output_type.dtype,
                 )]
     elif len(latent_state_shape) == 2:
-        out_ib = [tvm.te.extern(output_type.shape, [data, buffer_var, current_idx],
+        out_ib = [tvm.te.extern(output_type.shape, [data, latent_state, current_idx],
                 lambda ins, outs: gen_ib_2d(ins[0], ins[1], ins[2], outs[0]),
-                name=op + "_compute.generic", 
+                name=op_name + "_compute.generic", 
                 dtype=output_type.dtype,
                 )]
     return out_ib
