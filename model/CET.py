@@ -1,0 +1,1 @@
+# [1] M. Rohr et al., “Transformer Network with Time Prior for Predicting Clinical Outcome from EEG of Cardiac Arrest Patients,” presented at the 2023 Computing in Cardiology Conference, Nov. 2023. doi: 10.22489/CinC.2023.173.
