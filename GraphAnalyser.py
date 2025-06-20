@@ -73,12 +73,18 @@ class GraphAnalyser:
     # time_step_size: step size of siding window on time dimension
     def __init__(self, torch_mod: nn.Module, input_shape, time_step_size: int):
         self._named_modules = dict(torch_mod.named_modules())
-        print(self._named_modules)
-        self._traced_mod = fx.symbolic_trace(torch_mod.eval())
-        self._traced_mod_time_step = fx.symbolic_trace(torch_mod.eval()) # traced graph for catching time step info, used for transformation
-        self._traced_mod.graph.print_tabular()
+        # print(self._named_modules)
+        x = torch.randn(*input_shape)
+        self._traced_mod = fx.symbolic_trace(torch_mod.eval(), 
+                                             concrete_args={'x': x},
+                                             )
+        self._traced_mod_time_step = fx.symbolic_trace(torch_mod.eval(),
+                                                       concrete_args={'x': x},
+                                                       ) # traced graph for catching time step info, used for transformation
+        # self._traced_mod.graph.print_tabular()
         self._uncausal_nodes = find_uncausal_nodes(self._traced_mod.graph, self._named_modules)
         self._uncausal_nodes = self.get_all_uncausal_successors_of_uncausal_nodes()
+        print(self._uncausal_nodes)
 
         self.init_ssm_metadata_of_nodes()
         self.mark_causality_of_nodes()
@@ -143,8 +149,10 @@ class GraphAnalyser:
         sample_input = torch.randn(*self._input_shape)
         fx.passes.shape_prop.ShapeProp(self._traced_mod).propagate(sample_input)
         for node in self._traced_mod.graph.nodes:
-            print(node.name, node.meta['tensor_meta'].dtype,
-                node.meta['tensor_meta'].shape, node.meta['causal'])
+            print(node.name)
+            if ('tensor_meta' in node.meta):
+                print(node.name, node.meta['tensor_meta'].dtype,
+                    node.meta['tensor_meta'].shape, node.meta['causal'])
 
     def capture_shape_info_with_time_step_size(self):
 

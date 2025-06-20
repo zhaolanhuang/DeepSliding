@@ -33,27 +33,45 @@ UNCAUSAL_MODULE_NAMES = [
 
     # Activations
     "MultiheadAttention",
-    "Softmin",
-    "Softmax",
-    "Softmax2d",
-    "LogSoftmax",
 
     #
     "ChannelShuffle",
 
 ]
 
-UNCAUSAL_FUNCTION_NAMES = [
+def _is_uncausal_softmax(mod):
+    if mod.dim == -1:
+        return True
+    else:
+        return False
     
-]
+# [name: judge func(mod)]
+COULD_BE_UNCAUSAL_MODULES = {
+    "Softmin": _is_uncausal_softmax,
+    "Softmax": _is_uncausal_softmax,
+    "Softmax2d": _is_uncausal_softmax,
+    "LogSoftmax": _is_uncausal_softmax,
 
+}
+    
 def is_uncausal_module(mod):
     if isinstance(mod, str):
         return (mod in UNCAUSAL_MODULE_NAMES)
     elif isinstance(mod, nn.Module):
+        if (type(mod).__name__ in COULD_BE_UNCAUSAL_MODULES):
+            return COULD_BE_UNCAUSAL_MODULES[type(mod).__name__](mod)
         return type(mod).__name__ in UNCAUSAL_MODULE_NAMES
     else:
         raise TypeError(f"Unreconized module type: {type(mod)}")
+
+
+
+UNCAUSAL_FUNCTION_NAMES = [
+    
+]
+
+
+
 
 # TODO: Impl
 def is_uncausal_function(func):
