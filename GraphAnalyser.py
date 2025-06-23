@@ -76,10 +76,10 @@ class GraphAnalyser:
         # print(self._named_modules)
         x = torch.randn(*input_shape)
         self._traced_mod = fx.symbolic_trace(torch_mod.eval(), 
-                                             concrete_args={'x': x},
+                                            #  concrete_args={'x': x}, # cause error...
                                              )
         self._traced_mod_time_step = fx.symbolic_trace(torch_mod.eval(),
-                                                       concrete_args={'x': x},
+                                                    #    concrete_args={'x': x}, # would cause overwritten input x, so cannot capture step size info
                                                        ) # traced graph for catching time step info, used for transformation
         # self._traced_mod.graph.print_tabular()
         self._uncausal_nodes = find_uncausal_nodes(self._traced_mod.graph, self._named_modules)

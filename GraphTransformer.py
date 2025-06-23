@@ -53,9 +53,9 @@ class GraphTransformer(fx.Transformer):
         return super().call_method(target, args, kwargs)
     
     def call_module(self, target: str, args, kwargs):
-        node: fx.Node = get_graph_node_by_target(self._traced_mod.graph, target)
         if target.endswith("_ssm"):
             return super().call_module(target, args, kwargs)
+        node: fx.Node = get_graph_node_by_target(self._traced_mod.graph, target)
         ssm_meta : SSMMetadata = node.meta['ssm_meta']
         op_mod = self.fetch_attr(target)
         out_tensor_meta = node.meta['tensor_meta']
