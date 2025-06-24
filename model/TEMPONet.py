@@ -4,7 +4,7 @@
 import torch
 import torch.nn as nn
 
-DEFAULT_INPUT_SHAPE = (14 ,300) # (C, T)
+DEFAULT_INPUT_SHAPE = (1, 14 ,300) # (N, C, T), add N=1 for avoid tvm's error on Pool1d
 DEFAULT_SLIDING_STEP_SIZE = 30
 
 class TEMPONet_blocks(nn.Module):
