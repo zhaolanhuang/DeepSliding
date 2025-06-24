@@ -39,6 +39,7 @@ def load_model(model_path: str, shape_dict=None):
                                 )
     else:
         raise NotImplementedError()
+    print(model.mod)
     return model.mod, model.params
 
 if __name__ == "__main__":

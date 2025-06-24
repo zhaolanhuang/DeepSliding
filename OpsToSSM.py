@@ -13,7 +13,7 @@ def inference_ssm_params(op_mod):
     num_s = None
     stride = None
     if isinstance(op_mod, nn.Conv1d):
-        num_s = op_mod.kernel_size[0] * op_mod.dilation[0]
+        num_s = (op_mod.kernel_size[0] - 1) * op_mod.dilation[0] + 1
         stride = op_mod.stride[0]
     elif isinstance(op_mod, nn.AvgPool1d | nn.MaxPool1d):
         num_s = op_mod.kernel_size[0]

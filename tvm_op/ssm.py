@@ -29,7 +29,7 @@ _op.get(op_name).add_type_rel("SSMTypeRel", _rel) # -> Key for TypeInference
 
 
 _op.get(op_name).set_support_level(1)
-_op.register_pattern(op_name, _op.OpPattern.ELEMWISE)
+_op.register_pattern(op_name, _op.OpPattern.INJECTIVE) # avoid tvm's error if ssm followed by pooling
 _op.register_stateful(op_name, True)
 
 # Avoid name conflictsin C Code
@@ -193,6 +193,7 @@ def _strategy(attrs, inputs, out_type, target):
     strategy.add_implementation(
         _compute,
         wrap_topi_schedule(topi.generic.schedule_extern),
+        # None,
         name=op_name + ".generic",
     )
     return strategy

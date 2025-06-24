@@ -12,6 +12,7 @@ if __name__ == "__main__":
     graph_analyser = GraphAnalyser(ori_mod, DEFAULT_INPUT_SHAPE, DEFAULT_SLIDING_STEP_SIZE)
     graph_transformer = GraphTransformer(graph_analyser, True)
     new_g = graph_transformer.transform()
+    new_g.graph.print_tabular()
 
     scripted_model = torch.jit.trace(new_g, x, check_trace=True).eval()
     print(scripted_model.inlined_graph)

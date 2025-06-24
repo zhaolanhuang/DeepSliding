@@ -65,6 +65,7 @@ class GraphTransformer(fx.Transformer):
         if ssm_meta.is_causal and is_ssm_able(op_mod):
             new_ssm_mod = self.ops_to_ssm(op_mod, in_tensor_meta.shape[:-1])
             new_name = target + "_ssm"
+            new_name = new_name.replace(".", "_") # replace . with _ to avoide name confilcts in tvm
             self._traced_mod.add_submodule(new_name, new_ssm_mod)
             return self.call_module(new_name, args, kwargs)
         elif ssm_meta.is_causal_breaker and is_ssm_able(op_mod):
