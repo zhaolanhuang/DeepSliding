@@ -4,7 +4,9 @@
 import torch
 import torch.nn as nn
 from torch.nn.utils import weight_norm
-
+# Use Nottingham data shape by default
+DEFAULT_INPUT_SHAPE = (1, 88 ,192) # (N, C, T), add N=1 for avoid tvm's error on Pool1d
+DEFAULT_SLIDING_STEP_SIZE = 96
 
 class Chomp1d(nn.Module):
     def __init__(self, chomp_size):
@@ -12,7 +14,7 @@ class Chomp1d(nn.Module):
         self.chomp_size = chomp_size
 
     def forward(self, x):
-        return x[:, :, :-self.chomp_size].contiguous()
+        return x[:, :, :-self.chomp_size]
 
 
 class TemporalBlock(nn.Module):
@@ -30,8 +32,16 @@ class TemporalBlock(nn.Module):
         self.relu2 = nn.ReLU()
         self.dropout2 = nn.Dropout(dropout)
 
-        self.net = nn.Sequential(self.conv1, self.chomp1, self.relu1, self.dropout1,
-                                 self.conv2, self.chomp2, self.relu2, self.dropout2)
+        self.net = nn.Sequential(self.conv1, 
+                                #  self.chomp1, 
+                                 self.relu1, 
+                                #  self.dropout1,
+                                 self.conv2, 
+                                #  self.chomp2, 
+                                 self.relu2, 
+                                #  self.dropout2
+                                 )
+        print(padding)
         self.downsample = nn.Conv1d(n_inputs, n_outputs, 1) if n_inputs != n_outputs else None
         self.relu = nn.ReLU()
         self.init_weights()
@@ -45,6 +55,7 @@ class TemporalBlock(nn.Module):
     def forward(self, x):
         out = self.net(x)
         res = x if self.downsample is None else self.downsample(x)
+        print("out:", out.shape, "res:",res.shape)
         return self.relu(out + res)
 
 
@@ -58,23 +69,39 @@ class TemporalConvNet(nn.Module):
             in_channels = num_inputs if i == 0 else num_channels[i-1]
             out_channels = num_channels[i]
             layers += [TemporalBlock(in_channels, out_channels, kernel_size, stride=1, dilation=dilation_size,
-                                     padding=(kernel_size-1) * dilation_size, dropout=dropout)]
+                                     padding=(kernel_size-1) * dilation_size // 2, # ZL: slitly modify to align with Res conn
+                                    # padding = 0,
+                                     dropout=dropout)]
 
         self.network = nn.Sequential(*layers)
 
     def forward(self, x):
         return self.network(x)
 
+INPUT_SIZE = 88
+N_HIDDEN = 150
+LEVELS = 4
+N_CHANNELS = [N_HIDDEN] * LEVELS
+KERNEL_SIZE = 5
+DROPOUT = 0.25
+
 # Poly Music model
-class TCN(nn.Module):
-    def __init__(self, input_size, output_size, num_channels, kernel_size, dropout):
-        super(TCN, self).__init__()
+class ResTCN(nn.Module):
+    def __init__(self, input_size=INPUT_SIZE, output_size=INPUT_SIZE, 
+                 num_channels=N_CHANNELS, kernel_size=KERNEL_SIZE, dropout=DROPOUT):
+        super(ResTCN, self).__init__()
         self.tcn = TemporalConvNet(input_size, num_channels, kernel_size, dropout=dropout)
         self.linear = nn.Linear(num_channels[-1], output_size)
         self.sig = nn.Sigmoid()
 
     def forward(self, x):
         # x needs to have dimension (N, C, L) in order to be passed into CNN
-        output = self.tcn(x.transpose(1, 2)).transpose(1, 2)
+        output = self.tcn(x).transpose(1, 2)
         output = self.linear(output).double()
         return self.sig(output)
+    
+if __name__ == "__main__":
+    x = torch.randn(*DEFAULT_INPUT_SHAPE)
+    net = ResTCN().eval()
+    y = net(x)
+    print(y.shape)

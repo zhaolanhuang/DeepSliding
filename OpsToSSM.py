@@ -16,8 +16,8 @@ def inference_ssm_params(op_mod):
         num_s = (op_mod.kernel_size[0] - 1) * op_mod.dilation[0] + 1
         stride = op_mod.stride[0]
     elif isinstance(op_mod, nn.AvgPool1d | nn.MaxPool1d):
-        num_s = op_mod.kernel_size[0]
-        stride = op_mod.stride[0]
+        num_s = op_mod.kernel_size
+        stride = op_mod.stride
     elif isinstance(op_mod, nn.Flatten):
         if (op_mod.end_dim == -1):
             raise NotImplementedError("Inference SSM Params: Flatten with end_dim=-1")
