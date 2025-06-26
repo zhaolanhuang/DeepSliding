@@ -20,28 +20,31 @@ class Chomp1d(nn.Module):
 class TemporalBlock(nn.Module):
     def __init__(self, n_inputs, n_outputs, kernel_size, stride, dilation, padding, dropout=0.2):
         super(TemporalBlock, self).__init__()
-        self.conv1 = weight_norm(nn.Conv1d(n_inputs, n_outputs, kernel_size,
-                                           stride=stride, padding=padding, dilation=dilation))
+        # self.conv1 = weight_norm(nn.Conv1d(n_inputs, n_outputs, kernel_size,
+        #                                    stride=stride, padding=padding, dilation=dilation))
+        self.conv1 = nn.Conv1d(n_inputs, n_outputs, kernel_size,
+                                           stride=stride, padding=padding, dilation=dilation)
         self.chomp1 = Chomp1d(padding)
         self.relu1 = nn.ReLU()
         self.dropout1 = nn.Dropout(dropout)
 
-        self.conv2 = weight_norm(nn.Conv1d(n_outputs, n_outputs, kernel_size,
-                                           stride=stride, padding=padding, dilation=dilation))
+        # self.conv2 = weight_norm(nn.Conv1d(n_outputs, n_outputs, kernel_size,
+        #                                    stride=stride, padding=padding, dilation=dilation))
+        self.conv2 = nn.Conv1d(n_outputs, n_outputs, kernel_size,
+                                           stride=stride, padding=padding, dilation=dilation)
         self.chomp2 = Chomp1d(padding)
         self.relu2 = nn.ReLU()
         self.dropout2 = nn.Dropout(dropout)
 
         self.net = nn.Sequential(self.conv1, 
-                                #  self.chomp1, 
+                                #  self.chomp1, # ZL: slitly modify to align with Res conn
                                  self.relu1, 
-                                #  self.dropout1,
+                                 self.dropout1,
                                  self.conv2, 
-                                #  self.chomp2, 
+                                #  self.chomp2, # ZL: slitly modify to align with Res conn
                                  self.relu2, 
-                                #  self.dropout2
+                                 self.dropout2
                                  )
-        print(padding)
         self.downsample = nn.Conv1d(n_inputs, n_outputs, 1) if n_inputs != n_outputs else None
         self.relu = nn.ReLU()
         self.init_weights()
@@ -70,7 +73,6 @@ class TemporalConvNet(nn.Module):
             out_channels = num_channels[i]
             layers += [TemporalBlock(in_channels, out_channels, kernel_size, stride=1, dilation=dilation_size,
                                      padding=(kernel_size-1) * dilation_size // 2, # ZL: slitly modify to align with Res conn
-                                    # padding = 0,
                                      dropout=dropout)]
 
         self.network = nn.Sequential(*layers)
@@ -79,7 +81,7 @@ class TemporalConvNet(nn.Module):
         return self.network(x)
 
 INPUT_SIZE = 88
-N_HIDDEN = 150
+N_HIDDEN = 75 # ori 150, halve it to fit in tiny device
 LEVELS = 4
 N_CHANNELS = [N_HIDDEN] * LEVELS
 KERNEL_SIZE = 5
@@ -97,7 +99,7 @@ class ResTCN(nn.Module):
     def forward(self, x):
         # x needs to have dimension (N, C, L) in order to be passed into CNN
         output = self.tcn(x).transpose(1, 2)
-        output = self.linear(output).double()
+        output = self.linear(output)
         return self.sig(output)
     
 if __name__ == "__main__":
