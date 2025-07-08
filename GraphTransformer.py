@@ -128,5 +128,12 @@ if __name__ == "__main__":
             pass
         finally:
             pass
+    print("y:", y)
+    print("y_iter:", y_iter)
+    abs_err = torch.dist(y, y_iter, 1)
+    y_n = torch.norm(y, 1)
+    print("abs_err:", abs_err)
+    print("y_norm:", y_n)
+    print("rel_err:", abs_err / y_n)
     assert torch.allclose(y, y_iter)
     print("Result allclose!")

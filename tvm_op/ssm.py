@@ -24,7 +24,8 @@ def _rel(args, attrs):
     # func = attrs["relay_func"]
     # return relay.TupleType([relay.TensorType(attrs["output_shape"], args[1].dtype), relay.TensorType(func.body.checked_type.shape,func.body.checked_type.dtype)])
     # print("SSM Type REL:", args[1])
-    return args[1]
+    # return args[1]
+    return relay.TensorType(args[1].shape, args[0].dtype)
 _op.get(op_name).add_type_rel("SSMTypeRel", _rel) # -> Key for TypeInference
 
 
@@ -38,7 +39,7 @@ _identifier_idx = 1
 def ssm(x, num_of_latent_state, latent_dim, stride):
     global _identifier_idx
     latent_state_shape = tuple([*latent_dim, num_of_latent_state])
-    latent_state = relay.var(f"ssm_latent_state_var_{_identifier_idx}", shape=latent_state_shape) # TODO: add type inference
+    latent_state = relay.var(f"ssm_latent_state_var_{_identifier_idx}", shape=latent_state_shape, dtype="bfloat16") # TODO: add type inference
     current_idx = relay.var(f"ssm_cur_idx_{_identifier_idx}", shape=(1,), dtype="int32")
     _identifier_idx += 1 
 
@@ -59,6 +60,29 @@ def wrap_topi_schedule(topi_schedule):
 
 
 from tvm.topi import utils
+
+T = tvm.tir
+
+def u16tof32(v):
+    uint32_v = v.astype("uint32")
+    uint32_v = uint32_v << tvm.tir.const(16, "uint32")
+    return T.reinterpret("float32", uint32_v)
+
+
+def bf16tof32(v):
+    return u16tof32(T.reinterpret("uint16", v))
+
+
+def f32tou16(v):
+    uint32_v = T.reinterpret("uint32", v)
+    rounding_bias = (uint32_v >> tvm.tir.const(16, "uint32")) & tvm.tir.const(1, "uint32")
+    rounding_bias += tvm.tir.const(0x7FFF, "uint32")
+    uint32_v = uint32_v + rounding_bias
+    return (uint32_v >> tvm.tir.const(16, "uint32")).astype("uint16")
+
+
+def f32tobf16(v):
+    return T.reinterpret("bfloat16", f32tou16(v))
 
 @relay.op.op.register_compute(op_name)
 def _compute(attrs, inputs, output_type):
@@ -88,7 +112,7 @@ def _compute(attrs, inputs, output_type):
             with ib.for_range(0,  latent_state_shape[1], "i") as i:
                 with ib.for_range(0, latent_state_shape[2], "j") as j:
                     with ib.for_range(0, 1, "k") as k:
-                        buffer[n , i , j , latent_state_shape[3] - 1 - k] = data[n, i , j , k]
+                        buffer[n , i , j , latent_state_shape[3] - 1 - k] = f32tobf16(data[n, i , j , k])
 
         cur_idx[0] = cur_idx[0] + 1
 
@@ -98,7 +122,7 @@ def _compute(attrs, inputs, output_type):
                 with ib.for_range(0,  latent_state_shape[1], "i") as i:
                     with ib.for_range(0, latent_state_shape[2], "j") as j:
                         with ib.for_range(0, latent_state_shape[3], "k") as k:
-                            out[n , i , j , k] = buffer[n, i , j , k]
+                            out[n , i , j , k] = bf16tof32(buffer[n, i , j , k])
             cur_idx[0] = cur_idx[0] - stride
 
         with ib.else_scope():
@@ -121,7 +145,7 @@ def _compute(attrs, inputs, output_type):
         with ib.for_range(0 , latent_state_shape[0], "n") as n: # begin of for loop has to be zero for c codegen...
             with ib.for_range(0,  latent_state_shape[1], "i") as i:
                 with ib.for_range(0, 1, "k") as k:
-                    buffer[n , i , latent_state_shape[2] - 1 - k] = data[n, i , k]
+                    buffer[n , i , latent_state_shape[2] - 1 - k] = f32tobf16(data[n, i , k])
 
         cur_idx[0] = cur_idx[0] + 1
 
@@ -130,7 +154,7 @@ def _compute(attrs, inputs, output_type):
             with ib.for_range(0 , latent_state_shape[0], "n") as n: # begin of for loop has to be zero for c codegen...
                 with ib.for_range(0,  latent_state_shape[1], "i") as i:
                     with ib.for_range(0, latent_state_shape[2], "k") as k:
-                        out[n , i , k] = buffer[n, i , k]
+                        out[n , i , k] = bf16tof32(buffer[n, i , k])
             cur_idx[0] = cur_idx[0] - stride
 
         with ib.else_scope():
