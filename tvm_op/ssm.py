@@ -36,15 +36,19 @@ _op.register_stateful(op_name, True)
 # Avoid name conflictsin C Code
 _identifier_idx = 1
 
-def ssm(x, num_of_latent_state, latent_dim, stride):
+#bf16: use bfloat 16 for state storage
+def ssm(x, num_of_latent_state, latent_dim, stride, bf16=False):
     global _identifier_idx
     latent_state_shape = tuple([*latent_dim, num_of_latent_state])
-    latent_state = relay.var(f"ssm_latent_state_var_{_identifier_idx}", shape=latent_state_shape, dtype="bfloat16") # TODO: add type inference
+    if bf16:
+        latent_state = relay.var(f"ssm_latent_state_var_{_identifier_idx}", shape=latent_state_shape, dtype="bfloat16")
+    else:
+        latent_state = relay.var(f"ssm_latent_state_var_{_identifier_idx}", shape=latent_state_shape, dtype="float32") # TODO: add type inference
     current_idx = relay.var(f"ssm_cur_idx_{_identifier_idx}", shape=(1,), dtype="int32")
     _identifier_idx += 1 
 
     attrs = tvm.ir.make_node("DictAttrs", num_of_latent_state=num_of_latent_state, 
-                            latent_dim=latent_dim, stride=stride, latent_state_shape=latent_state_shape)
+                            latent_dim=latent_dim, stride=stride, latent_state_shape=latent_state_shape, bf16=bf16)
 
     return relay.Call(relay.op.get("ssm"), [x, latent_state, current_idx], attrs)
 
@@ -69,7 +73,7 @@ def u16tof32(v):
     return T.reinterpret("float32", uint32_v)
 
 
-def bf16tof32(v):
+def _bf16tof32(v):
     return u16tof32(T.reinterpret("uint16", v))
 
 
@@ -81,7 +85,7 @@ def f32tou16(v):
     return (uint32_v >> tvm.tir.const(16, "uint32")).astype("uint16")
 
 
-def f32tobf16(v):
+def _f32tobf16(v):
     return T.reinterpret("bfloat16", f32tou16(v))
 
 @relay.op.op.register_compute(op_name)
@@ -94,6 +98,14 @@ def _compute(attrs, inputs, output_type):
     latent_dim = attrs["latent_dim"]
     stride = attrs["stride"]
     latent_state_shape = attrs["latent_state_shape"]
+    bf16 = attrs["bf16"]
+
+    if not bf16:
+        f32tobf16 = lambda x : x
+        bf16tof32 = lambda x : x
+    else:
+        f32tobf16 = _f32tobf16
+        bf16tof32 = _bf16tof32
 
     def gen_ib_4d(data_buf, buffer_var_buf, current_idx_buf, out_buf):
         ib = tvm.tir.ir_builder.create()
@@ -175,7 +187,7 @@ def _compute(attrs, inputs, output_type):
         # Copy new data to buffer
         with ib.for_range(0 , latent_state_shape[0], "n") as n: # begin of for loop has to be zero for c codegen...
             with ib.for_range(0, 1, "k") as k:
-                buffer[n , latent_state_shape[1] - 1 - k] = data[n, k]
+                buffer[n , latent_state_shape[1] - 1 - k] = f32tobf16(data[n, k])
 
         cur_idx[0] = cur_idx[0] + 1
 
@@ -183,7 +195,7 @@ def _compute(attrs, inputs, output_type):
             # copy to Output buffer
             with ib.for_range(0 , latent_state_shape[0], "n") as n: # begin of for loop has to be zero for c codegen...
                 with ib.for_range(0, latent_state_shape[1], "k") as k:
-                    out[n , k] = buffer[n, k]
+                    out[n , k] = bf16tof32(buffer[n, k])
             cur_idx[0] = cur_idx[0] - stride
 
         with ib.else_scope():

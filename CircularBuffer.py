@@ -3,7 +3,7 @@ import torch.nn as nn
 
 
 class CircularBuffer(nn.Module):
-    def __init__(self, buffer_size: int, latent_dim=None, bf16=True):
+    def __init__(self, buffer_size: int, latent_dim=None, bf16=False):
         super().__init__()
         self.buffer_size = buffer_size
         self.latent_dim = latent_dim

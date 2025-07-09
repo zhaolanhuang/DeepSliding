@@ -14,16 +14,23 @@ import inspect
 from .SSMFakeOperator import SSMFakeOperator
 from .tvm_op.ssm import ssm
 
+_BF16 = False
+
 def ssm_fake_op(inputs, input_types):
+    global _BF16
     data = inputs[0]
     num_latent_states = inputs[1]
     latent_dim = tuple(inputs[2])
     stride = inputs[3]
-    return ssm(data, num_latent_states, latent_dim, stride)
+    return ssm(data, num_latent_states, latent_dim, stride, _BF16)
 
 custom_convert_map = {
     "DeepSliding::ssm_fake_op": ssm_fake_op,
 }
+
+def set_bf16(on):
+    global _BF16
+    _BF16 = on
 
 def load_model(model_path: str, shape_dict=None):
     frontend = guess_frontend(model_path)
