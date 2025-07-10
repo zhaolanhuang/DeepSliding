@@ -16,7 +16,9 @@ SSMABLE_OP_NAMES = [
     "Conv1d",
     "AvgPool1d",
     "MaxPool1d",
-    "Flatten"
+    "Flatten",
+    "AdaptiveMaxPool1d",
+    "AdaptiveAvgPool1d"
 ]
 
 def is_ssm_able(op_mod):
@@ -43,8 +45,8 @@ class GraphTransformer(fx.Transformer):
     def from_torch_module(cls, torch_mod: nn.Module, input_shape, time_step_size: int, is_fake_ssm=False):
         return cls(GraphAnalyser(torch_mod, input_shape, time_step_size), is_fake_ssm)
 
-    def ops_to_ssm(self, op_mod, latent_dim, num_latent_state=None, time_stride=None):
-        return ops_to_ssm(op_mod, latent_dim, num_latent_state, time_stride, self._ssm_op_cls)
+    def ops_to_ssm(self, op_mod, in_shape):
+        return ops_to_ssm(op_mod, in_shape, self._ssm_op_cls)
 
     def call_function(self, target, args, kwargs):
         return super().call_function(target, args, kwargs)
@@ -62,20 +64,22 @@ class GraphTransformer(fx.Transformer):
         in_tensor_meta = node.all_input_nodes[0].meta['tensor_meta']
         print(node.target, node.meta['ssm_meta'])
 
-        if ssm_meta.is_causal and is_ssm_able(op_mod):
-            new_ssm_mod = self.ops_to_ssm(op_mod, in_tensor_meta.shape[:-1])
+
+        # causal breaker is also causal
+        # TODO: dont use concept of "causal" cause in time series the whole model is actually causal, use time-accumulative operator instead
+        if (ssm_meta.is_causal or ssm_meta.is_causal_breaker) and is_ssm_able(op_mod):
+            if ssm_meta.is_global_pooling:
+                print("Found global Pooling!")
+            if isinstance(op_mod, nn.AdaptiveAvgPool1d | nn.AdaptiveMaxPool1d): # rewrite Adaptive to non-adaptive
+                pool_cls = nn.AvgPool1d if isinstance(op_mod, nn.AdaptiveAvgPool1d) else nn.MaxPool1d
+                stride = (in_tensor_meta.shape[-1]//op_mod.output_size)  
+                k = in_tensor_meta.shape[-1] - (op_mod.output_size-1)*stride
+                op_mod = pool_cls(k, stride, 0)
+            new_ssm_mod = self.ops_to_ssm(op_mod, in_tensor_meta.shape)
             new_name = target + "_ssm"
             new_name = new_name.replace(".", "_") # replace . with _ to avoide name confilcts in tvm
             self._traced_mod.add_submodule(new_name, new_ssm_mod)
             return self.call_module(new_name, args, kwargs)
-        elif ssm_meta.is_causal_breaker and is_ssm_able(op_mod):
-            if isinstance(op_mod, nn.Flatten):
-                latent_dim = in_tensor_meta.shape[:-1]
-                num_latent = in_tensor_meta.shape[-1]
-                new_ssm_mod = self.ops_to_ssm(op_mod, latent_dim, num_latent, 1)
-                new_name = target + "_ssm"
-                self._traced_mod.add_submodule(new_name, new_ssm_mod)
-                return self.call_module(new_name, args, kwargs)
         return super().call_module(target, args, kwargs)
     
     def inference_causal_breaker_ssm_params(self):
@@ -100,8 +104,9 @@ if __name__ == "__main__":
             self.relu = nn.ReLU()
             self.conv2 = nn.Conv1d(4, 4, kernel_size=3)
             self.conv3 = nn.Conv1d(4, 4, kernel_size=3)
+            self.global_pool = nn.AdaptiveAvgPool1d(1)
             self.flatten1 = nn.Flatten(0, -1)
-            self.linear1 = nn.Linear(128,10)
+            self.linear1 = nn.Linear(4,10)
             self.called_mod = CalledModule()
 
         def forward(self, x):
@@ -110,6 +115,7 @@ if __name__ == "__main__":
             x = self.called_mod(x2)
             x = self.conv2(x)
             x = self.conv3(x)
+            x = self.global_pool(x)
             x = self.flatten1(x)
             x1 = x * 2
             x += x1
@@ -117,7 +123,7 @@ if __name__ == "__main__":
             return x
     x = torch.randn(50, 40)
     ori_mod = MyModel()
-    graph_transformer = GraphTransformer.from_torch_module(ori_mod, [50, 40], 10)
+    graph_transformer = GraphTransformer.from_torch_module(ori_mod, [50, 40], 40)
     new_g = graph_transformer.transform()
     
     y = ori_mod(x)

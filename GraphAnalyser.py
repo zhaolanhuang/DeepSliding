@@ -135,7 +135,7 @@ class GraphAnalyser:
     def find_causal_breaker(self):
         causal_breaker = []
         for n in self._uncausal_nodes:
-            inp_causality = [x.meta['causal'] for x in  n.all_input_nodes]
+            inp_causality = [x.meta['causal'] for x in n.all_input_nodes]
             is_all_inp_causal = reduce(lambda x,y: x and y, 
                                         inp_causality)
             if is_all_inp_causal:
@@ -200,6 +200,11 @@ class GraphAnalyser:
                 input_s = n.meta['tensor_meta'].shape[-1]
                 kernel_size = op_mod.kernel_size
                 if input_s == kernel_size:
+                    n.meta['ssm_meta'].is_global_pooling = True
+                else:
+                    n.meta['ssm_meta'].is_global_pooling = False
+            elif isinstance(op_mod, nn.AdaptiveAvgPool1d | nn.AdaptiveMaxPool1d):
+                if op_mod.output_size == 1:
                     n.meta['ssm_meta'].is_global_pooling = True
                 else:
                     n.meta['ssm_meta'].is_global_pooling = False
