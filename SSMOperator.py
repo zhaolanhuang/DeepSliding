@@ -1,18 +1,16 @@
 import torch
 import torch.nn as nn
 from .CircularBuffer import CircularBuffer
+from .BaseSSMOperator import BaseSSMOperator
 
 class WaitForNextInputError(Exception):
     pass
 
 
-class SSMOperator(nn.Module):
+class SSMOperator(BaseSSMOperator):
     def __init__(self, wrapped_operator: nn.Module, num_of_latent_state, latent_dim, stride):
-        super().__init__()
-        self._wrapped_operator = wrapped_operator
+        super(SSMOperator, self).__init__(wrapped_operator, num_of_latent_state, latent_dim, stride)
         self._cir_buffer = CircularBuffer(num_of_latent_state, latent_dim)
-        self._num_of_latent_state = num_of_latent_state
-        self._stride = stride
         self._current_filled_latent_state = 0
     # 1D: (C, T) scheme, 2D: (C,H,W,T) scheme -> (Latent_DIM, T) scheme, T for time axis
     # Input: (C, 1) or (C, H, W, 1) -> point-by-point along time

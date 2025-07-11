@@ -6,6 +6,8 @@ from torch.library import Library, impl
 
 import copy
 
+from .BaseSSMOperator import BaseSSMOperator
+
 # Create a library
 my_lib = Library("DeepSliding", "DEF")
 
@@ -23,13 +25,10 @@ def ssm_fake_op_impl(x: torch.Tensor, num_of_latent_state: int, latent_dim: list
 ssm_fake_op = torch.ops.DeepSliding.ssm_fake_op
 
 
-class SSMFakeOperator(nn.Module):
+class SSMFakeOperator(BaseSSMOperator):
     def __init__(self, wrapped_operator: nn.Module, num_of_latent_state, latent_dim, stride):
-        super().__init__()
+        super(SSMFakeOperator, self).__init__(wrapped_operator, num_of_latent_state, latent_dim, stride)
         self._wrapped_operator = copy.copy(wrapped_operator) 
-        self._latent_dim = latent_dim
-        self._num_of_latent_state = num_of_latent_state
-        self._stride = stride
         # TODO: should be more elegant to do so..
         if isinstance(self._wrapped_operator, nn.Conv1d):
             self._wrapped_operator.padding = 0

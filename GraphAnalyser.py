@@ -84,7 +84,7 @@ class GraphAnalyser:
         # self._traced_mod.graph.print_tabular()
         self._uncausal_nodes = find_uncausal_nodes(self._traced_mod.graph, self._named_modules)
         self._uncausal_nodes = self.get_all_uncausal_successors_of_uncausal_nodes()
-        print(self._uncausal_nodes)
+        print("uncausal nodes:", self._uncausal_nodes)
 
         self.init_ssm_metadata_of_nodes()
         self.mark_causality_of_nodes()
@@ -98,7 +98,7 @@ class GraphAnalyser:
 
         self._causal_breaker = self.find_causal_breaker()
 
-        print(self._causal_breaker)
+        print("causal breaker:", self._causal_breaker)
 
         self.mark_global_pooling_of_nodes()
 
@@ -148,11 +148,11 @@ class GraphAnalyser:
     def capture_complete_shape_info(self):
         sample_input = torch.randn(*self._input_shape)
         fx.passes.shape_prop.ShapeProp(self._traced_mod).propagate(sample_input)
-        for node in self._traced_mod.graph.nodes:
-            print(node.name)
-            if ('tensor_meta' in node.meta):
-                print(node.name, node.meta['tensor_meta'].dtype,
-                    node.meta['tensor_meta'].shape, node.meta['causal'])
+        # for node in self._traced_mod.graph.nodes:
+        #     # print(node.name)
+        #     if ('tensor_meta' in node.meta):
+        #         print(node.name, node.meta['tensor_meta'].dtype,
+        #             node.meta['tensor_meta'].shape, node.meta['causal'])
 
     def capture_shape_info_with_time_step_size(self):
 
@@ -167,8 +167,8 @@ class GraphAnalyser:
 
         for node in self._traced_mod_time_step.graph.nodes:
             if "tensor_meta" in node.meta:
-                print(node.name, node.meta['tensor_meta'].dtype,
-                    node.meta['tensor_meta'].shape)
+                # print(node.name, node.meta['tensor_meta'].dtype,
+                #     node.meta['tensor_meta'].shape)
                 ori_node = get_graph_node_by_name(self._traced_mod.graph, node.name)
                 ori_node.meta['ssm_meta'].tensor_meta_time_step = node.meta['tensor_meta']
             else:

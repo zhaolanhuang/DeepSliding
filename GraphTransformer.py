@@ -62,12 +62,15 @@ class GraphTransformer(fx.Transformer):
         op_mod = self.fetch_attr(target)
         out_tensor_meta = node.meta['tensor_meta']
         in_tensor_meta = node.all_input_nodes[0].meta['tensor_meta']
-        print(node.target, node.meta['ssm_meta'])
+        
+        # print(node.target, node.meta['tensor_meta'])
+        # print(node.target, node.meta['ssm_meta'])
 
 
         # causal breaker is also causal
         # TODO: dont use concept of "causal" cause in time series the whole model is actually causal, use time-accumulative operator instead
         if (ssm_meta.is_causal or ssm_meta.is_causal_breaker) and is_ssm_able(op_mod):
+            in_ts_meta = node.all_input_nodes[0].meta['ssm_meta'].tensor_meta_time_step
             if ssm_meta.is_global_pooling:
                 print("Found global Pooling!")
             if isinstance(op_mod, nn.AdaptiveAvgPool1d | nn.AdaptiveMaxPool1d): # rewrite Adaptive to non-adaptive
@@ -76,6 +79,14 @@ class GraphTransformer(fx.Transformer):
                 k = in_tensor_meta.shape[-1] - (op_mod.output_size-1)*stride
                 op_mod = pool_cls(k, stride, 0)
             new_ssm_mod = self.ops_to_ssm(op_mod, in_tensor_meta.shape)
+            
+            # deal with sliding window
+            if in_ts_meta is not None:
+                print(node.target, "\t h_n:", new_ssm_mod.num_of_latent_state, "\t stride:", new_ssm_mod.stride, "\t input time step:", in_ts_meta.shape[-1])
+                if in_ts_meta.shape[-1] <= new_ssm_mod.num_of_latent_state and in_ts_meta.shape[-1] > new_ssm_mod.stride:
+                    print(f"re-set {node.target} stride: {new_ssm_mod.stride} to {in_ts_meta.shape[-1]}")
+                    new_ssm_mod.set_stride(in_ts_meta.shape[-1])
+
             new_name = target + "_ssm"
             new_name = new_name.replace(".", "_") # replace . with _ to avoide name confilcts in tvm
             self._traced_mod.add_submodule(new_name, new_ssm_mod)
@@ -106,7 +117,7 @@ if __name__ == "__main__":
             self.conv3 = nn.Conv1d(4, 4, kernel_size=3)
             self.global_pool = nn.AdaptiveAvgPool1d(1)
             self.flatten1 = nn.Flatten(0, -1)
-            self.linear1 = nn.Linear(4,10)
+            self.linear1 = nn.Linear(128,10)
             self.called_mod = CalledModule()
 
         def forward(self, x):
@@ -115,7 +126,7 @@ if __name__ == "__main__":
             x = self.called_mod(x2)
             x = self.conv2(x)
             x = self.conv3(x)
-            x = self.global_pool(x)
+            # x = self.global_pool(x)
             x = self.flatten1(x)
             x1 = x * 2
             x += x1
