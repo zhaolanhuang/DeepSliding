@@ -281,3 +281,8 @@ class WaveNet(torch.nn.Module):
         output = self.densnet(output)
 
         return output.contiguous()
+
+
+class TinyWaveNet(WaveNet):
+    def __init__(self):
+        super().__init__(layer_size=10, stack_size=5, in_channels=256, res_channels=64)
