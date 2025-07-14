@@ -28,7 +28,7 @@ ssm_fake_op = torch.ops.DeepSliding.ssm_fake_op
 class SSMFakeOperator(BaseSSMOperator):
     def __init__(self, wrapped_operator: nn.Module, num_of_latent_state, latent_dim, stride):
         super(SSMFakeOperator, self).__init__(wrapped_operator, num_of_latent_state, latent_dim, stride)
-        self._wrapped_operator = copy.copy(wrapped_operator) 
+        self._wrapped_operator = copy.deepcopy(wrapped_operator) 
         # TODO: should be more elegant to do so..
         if isinstance(self._wrapped_operator, nn.Conv1d):
             self._wrapped_operator.padding = 0

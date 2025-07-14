@@ -37,7 +37,7 @@ def load_model(model_path: str, shape_dict=None):
     if isinstance(frontend, PyTorchFrontend):
         if 'preserve_pytorch_scopes' in inspect.getfullargspec(relay.frontend.from_pytorch).args:
             model = tvmc.load(model_path, shape_dict=shape_dict, 
-                            use_parser_friendly_name=True, preserve_pytorch_scopes=True,
+                            use_parser_friendly_name=True, preserve_pytorch_scopes=False, # TODO preserve_pytorch_scopes should be True, needs debug
                             custom_convert_map=custom_convert_map
                             )
         else:

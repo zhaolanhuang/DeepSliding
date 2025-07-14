@@ -17,7 +17,7 @@ class Conv1dResidualBlock(nn.Module):
 
     def __init__(self, in_channels: int, out_channels: int, kernel_size: int = 3, stride=1, padding: int = 1,
                  bias: bool = False, convolution: Type[nn.Module] = nn.Conv1d,
-                 normalization: Type[nn.Module] = nn.BatchNorm1d, activation: Type[nn.Module] = nn.PReLU,
+                 normalization: Type[nn.Module] = nn.BatchNorm1d, activation: Type[nn.Module] = nn.LeakyReLU,
                  pooling: Tuple[nn.Module] = nn.AvgPool1d, dropout: float = 0.0) -> None:
         """
         Constructor method
@@ -37,12 +37,12 @@ class Conv1dResidualBlock(nn.Module):
         super(Conv1dResidualBlock, self).__init__()
         # Init main mapping
         self.main_mapping = nn.Sequential(
-            convolution(in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size, stride=stride,
+            convolution(in_channels=in_channels, out_channels=in_channels, kernel_size=kernel_size, stride=stride,
                         padding=padding, bias=bias),
-            normalization(num_features=out_channels, track_running_stats=True, affine=True),
+            normalization(num_features=in_channels, track_running_stats=True, affine=True), #ZL: keep as much channel at first
             activation(),
             nn.Dropout(p=dropout),
-            convolution(in_channels=out_channels, out_channels=out_channels, kernel_size=kernel_size, stride=stride,
+            convolution(in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size, stride=stride,
                         padding=padding, bias=bias),
             normalization(num_features=out_channels, track_running_stats=True, affine=True),
         )
@@ -72,15 +72,46 @@ class Conv1dResidualBlock(nn.Module):
         output = self.dropout(output)
         # Perform final downsampling
         return self.pooling(output)
-    
+
+class CET_S(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.resnet = Conv1dResidualBlock(18, 1, 5, 1, 2)
+        self.proj = nn.Linear(160, 64)
+        self.transformer = TransformerModel(num_classes=64, n_embd=64, n_head=1, hidden_size=64, n_layers=4)
+        self.fc1 = nn.Linear(64, 2)
+        self.flatten = nn.Flatten(end_dim=-1) # TODO should work without flatten in future
+    def forward(self, x):
+        x = self.resnet(x)
+        x = self.flatten(x)
+        x: torch.Tensor = self.proj(x)
+        x = x.reshape(1,1,-1) # Love from TVM: "Only 3D or 4D query supported"
+        x = self.transformer(x)
+        return self.fc1(x)
+
 class CET(nn.Module):
     def __init__(self):
         super().__init__()
-        self.resnet = Conv1dResidualBlock(18, 1, 5, 1, 2, pooling=None)
-        self.transformer = TransformerModel(num_classes=320, n_embd=320, n_head=1, hidden_size=64, n_layers=4)
-        self.fc1 = nn.Linear(320, 2)
+        self.resnet = Conv1dResidualBlock(18, 1, 5, 1, 2)
+        self.proj = nn.Linear(160, 256)
+        self.transformer = TransformerModel(num_classes=256, n_embd=256, n_head=1, hidden_size=64, n_layers=4)
+        self.fc1 = nn.Linear(256, 2)
     def forward(self, x):
         x = self.resnet(x)
+        x = self.proj(x)
+        x = self.transformer(x)
+        return self.fc1(x)
+    
+class CET_VAR(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.resnet = Conv1dResidualBlock(18, 1, 5, 1, 2)
+        self.transformer = TransformerModel(num_classes=320, n_embd=320, n_head=1, hidden_size=64, n_layers=4)
+        self.fc1 = nn.Linear(320, 2)
+        self.flatten = nn.Flatten(start_dim=1, end_dim=-1) # TODO should work without flatten in future
+    def forward(self, x):
+        x = self.resnet(x)
+        x = self.flatten(x)
         x = self.transformer(x)
         return self.fc1(x)
 

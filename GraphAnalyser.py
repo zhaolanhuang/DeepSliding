@@ -74,7 +74,7 @@ class GraphAnalyser:
     def __init__(self, torch_mod: nn.Module, input_shape, time_step_size: int):
         self._named_modules = dict(torch_mod.named_modules())
         # print(self._named_modules)
-        x = torch.randn(*input_shape)
+        # x = torch.randn(*input_shape)
         self._traced_mod = fx.symbolic_trace(torch_mod.eval(), 
                                             #  concrete_args={'x': x}, # cause error...
                                              )

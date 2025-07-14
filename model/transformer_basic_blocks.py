@@ -66,8 +66,8 @@ class TransformerBlock(nn.Module):
 
     def forward(self, x):
         
-        x = x + self.sa(self.ln1(x))
-        x = x + self.ffwd(self.ln2(x))
+        x = self.ln1(x + self.sa(x))
+        x = self.ln2(x + self.ffwd(x))
         return x
 
 class TransformerModel(nn.Module):
@@ -84,5 +84,5 @@ class TransformerModel(nn.Module):
         #x = self.token_embedding(x) + self.positional_embeddings
         x = self.blocks(x)
         x = self.ln_f(x)
-        logits = self.head(x[:,-1,:])
+        logits = self.head(x[...,-1,:])
         return logits

@@ -18,7 +18,8 @@ SSMABLE_OP_NAMES = [
     "MaxPool1d",
     "Flatten",
     "AdaptiveMaxPool1d",
-    "AdaptiveAvgPool1d"
+    "AdaptiveAvgPool1d",
+    "Linear",
 ]
 
 def is_ssm_able(op_mod):
@@ -39,7 +40,7 @@ class GraphTransformer(fx.Transformer):
             self._ssm_op_cls = SSMFakeOperator
         else:
             self._ssm_op_cls = SSMOperator
-        super().__init__(self._traced_mod)
+        super(GraphTransformer, self).__init__(self._traced_mod)
 
     @classmethod
     def from_torch_module(cls, torch_mod: nn.Module, input_shape, time_step_size: int, is_fake_ssm=False):
@@ -64,7 +65,7 @@ class GraphTransformer(fx.Transformer):
         in_tensor_meta = node.all_input_nodes[0].meta['tensor_meta']
         
         # print(node.target, node.meta['tensor_meta'])
-        # print(node.target, node.meta['ssm_meta'])
+        # print(node.target, node.meta['ssm_meta'], op_mod)
 
 
         # causal breaker is also causal
@@ -79,18 +80,20 @@ class GraphTransformer(fx.Transformer):
                 k = in_tensor_meta.shape[-1] - (op_mod.output_size-1)*stride
                 op_mod = pool_cls(k, stride, 0)
             new_ssm_mod = self.ops_to_ssm(op_mod, in_tensor_meta.shape)
+            print(node.target, "\t h_n:", new_ssm_mod.num_of_latent_state, "\t stride:", new_ssm_mod.stride)
             
             # deal with sliding window
             if in_ts_meta is not None:
-                print(node.target, "\t h_n:", new_ssm_mod.num_of_latent_state, "\t stride:", new_ssm_mod.stride, "\t input time step:", in_ts_meta.shape[-1])
+                # print(node.target, "\t h_n:", new_ssm_mod.num_of_latent_state, "\t stride:", new_ssm_mod.stride, "\t input time step:", in_ts_meta.shape[-1])
                 if in_ts_meta.shape[-1] <= new_ssm_mod.num_of_latent_state and in_ts_meta.shape[-1] > new_ssm_mod.stride:
                     print(f"re-set {node.target} stride: {new_ssm_mod.stride} to {in_ts_meta.shape[-1]}")
                     new_ssm_mod.set_stride(in_ts_meta.shape[-1])
 
-            new_name = target + "_ssm"
+            new_name = target + ".ssm"
             new_name = new_name.replace(".", "_") # replace . with _ to avoide name confilcts in tvm
             self._traced_mod.add_submodule(new_name, new_ssm_mod)
             return self.call_module(new_name, args, kwargs)
+        print("none-ssm module node:", target)
         return super().call_module(target, args, kwargs)
     
     def inference_causal_breaker_ssm_params(self):

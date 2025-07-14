@@ -28,7 +28,9 @@ def inference_ssm_params(op_mod, in_shape: tuple):
         else:
             num_s = 1
         stride = 1
-    
+    elif isinstance(op_mod, nn.Linear):
+        num_s = op_mod.in_features
+        stride = 1
     else:
         raise NotImplementedError("Inference SSM Params not supported for", type(op_mod))
     
