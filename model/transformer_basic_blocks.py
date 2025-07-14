@@ -5,7 +5,7 @@ import torch.nn.functional as F
 
 class MaskedSelfAttention(nn.Module):
     # Class for the Attention Mechanism
-    def __init__(self, head_size, n_embd, block_size):
+    def __init__(self, head_size, n_embd):
         super().__init__()
         self.key = nn.Linear(n_embd, head_size, bias=False)
         self.query = nn.Linear(n_embd, head_size, bias=False)
@@ -21,9 +21,9 @@ class MaskedSelfAttention(nn.Module):
 
 class MultiHeadAttention(nn.Module):
     # Class for the MultiHeadAttention
-    def __init__(self, num_heads, head_size, n_embd, block_size):
+    def __init__(self, num_heads, head_size, n_embd):
         super().__init__()
-        self.heads = nn.ModuleList([MaskedSelfAttention(head_size, n_embd, block_size) for _ in range(num_heads)])
+        self.heads = nn.ModuleList([MaskedSelfAttention(head_size, n_embd) for _ in range(num_heads)])
         self.proj = nn.Linear(n_embd, n_embd)
         self.num_heads = num_heads
         self.head_size = head_size
@@ -39,9 +39,9 @@ class MultiHeadAttention(nn.Module):
         return out
 
 class OneHeadAttention(nn.Module):
-    def __init__(self,  head_size, n_embd, block_size):
+    def __init__(self,  head_size, n_embd):
         super().__init__()
-        self.head = MaskedSelfAttention(head_size, n_embd, block_size)
+        self.head = MaskedSelfAttention(head_size, n_embd)
         self.proj = nn.Linear(n_embd, n_embd)
     def forward(self,x):
         x = self.head(x)
@@ -49,13 +49,13 @@ class OneHeadAttention(nn.Module):
         return out
 class TransformerBlock(nn.Module):
     # Class for the Encoder Block
-    def __init__(self, n_embd, n_head, block_size, hidden_size):
+    def __init__(self, n_embd, n_head, hidden_size):
         super().__init__()
         head_size = n_embd // n_head
         if n_head > 1 :
-            self.sa = MultiHeadAttention(n_head, head_size, n_embd, block_size)
+            self.sa = MultiHeadAttention(n_head, head_size, n_embd)
         else : 
-            self.sa = OneHeadAttention(head_size, n_embd, block_size)
+            self.sa = OneHeadAttention(head_size, n_embd)
         self.ffwd = nn.Sequential(
             nn.Linear(n_embd, hidden_size),
             nn.ReLU(), 
@@ -72,11 +72,11 @@ class TransformerBlock(nn.Module):
 
 class TransformerModel(nn.Module):
     # Class for the transformer model
-    def __init__(self, num_classes, n_embd, n_head, block_size, hidden_size, n_layers):
+    def __init__(self, num_classes, n_embd, n_head, hidden_size, n_layers):
         super().__init__()
         #self.positional_embeddings = nn.Parameter(torch.zeros(1, block_size, n_embd))
         #self.pos_embedding = PositionalEncoding(n_embd)
-        self.blocks = nn.Sequential(*[TransformerBlock(n_embd, n_head, block_size, hidden_size) for _ in range(n_layers)])
+        self.blocks = nn.Sequential(*[TransformerBlock(n_embd, n_head, hidden_size) for _ in range(n_layers)])
         self.ln_f = nn.LayerNorm(n_embd)
         self.head = nn.Linear(n_embd, num_classes)  
 
