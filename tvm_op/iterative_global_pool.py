@@ -15,7 +15,7 @@ import math
 from tvm.ir import register_intrin_lowering, Op, register_op_attr
 
 # Define the new operator in Relay
-op_name = "ssm"
+op_name = "iterative_global_pool"
 relay.op.op.register(op_name)
 
 
@@ -25,8 +25,8 @@ def _rel(args, attrs):
     # return relay.TupleType([relay.TensorType(attrs["output_shape"], args[1].dtype), relay.TensorType(func.body.checked_type.shape,func.body.checked_type.dtype)])
     # print("SSM Type REL:", args[1])
     # return args[1]
-    return relay.TensorType(args[1].shape, args[0].dtype)
-_op.get(op_name).add_type_rel("SSMTypeRel", _rel) # -> Key for TypeInference
+    return relay.TensorType(args[1].shape[:-1] + [1], args[0].dtype)
+_op.get(op_name).add_type_rel("IterGlobalPoolTypeRel", _rel) # -> Key for TypeInference
 
 
 _op.get(op_name).set_support_level(1)
@@ -36,18 +36,23 @@ _op.register_stateful(op_name, True)
 # Avoid name conflictsin C Code
 _identifier_idx = 1
 
+def ceildiv(a, b):
+    return -(a // -b)
+
 #bf16: use bfloat 16 for state storage
-def ssm(x, num_of_latent_state, latent_dim, stride, bf16=False):
+def iterative_global_pool(x, pool_type: str, pool_size: int, latent_dim: list[int], stride: int, bf16=False):
     global _identifier_idx
+    num_of_latent_state = ceildiv(pool_size, stride)
     latent_state_shape = tuple([*latent_dim, num_of_latent_state])
     if bf16:
-        latent_state = relay.var(f"ssm_latent_state_var_{_identifier_idx}", shape=latent_state_shape, dtype="bfloat16")
+        latent_state = relay.var(f"itergp_latent_state_var_{_identifier_idx}", shape=latent_state_shape, dtype="bfloat16")
     else:
-        latent_state = relay.var(f"ssm_latent_state_var_{_identifier_idx}", shape=latent_state_shape, dtype="float32") # TODO: add type inference
-    current_idx = relay.var(f"ssm_cur_idx_{_identifier_idx}", shape=(1,), dtype="int32")
+        latent_state = relay.var(f"itergp_latent_state_var_{_identifier_idx}", shape=latent_state_shape, dtype="float32") # TODO: add type inference
+    
+    current_idx = relay.var(f"itergp_cur_idx_{_identifier_idx}", shape=(3,), dtype="int32")
     _identifier_idx += 1 
 
-    attrs = tvm.ir.make_node("DictAttrs", num_of_latent_state=num_of_latent_state, 
+    attrs = tvm.ir.make_node("DictAttrs", pool_type=pool_type, pool_size=pool_size,
                             latent_dim=latent_dim, stride=stride, latent_state_shape=latent_state_shape, bf16=bf16)
 
     return relay.Call(relay.op.get(op_name), [x, latent_state, current_idx], attrs)
@@ -88,17 +93,24 @@ def f32tou16(v):
 def _f32tobf16(v):
     return T.reinterpret("bfloat16", f32tou16(v))
 
+import tvm.tir.op as tir_op
+
 @relay.op.op.register_compute(op_name)
 def _compute(attrs, inputs, output_type):
-    print("We are now at ssm_compute")  
+    print("We are now at iterative_global_pool_compute")  
     
+    #current_idx[1,2,3] = [_num_cur_pool_filled, _num_cur_cell_filled, _cur_cell_idx]
+
     data, latent_state, current_idx = inputs
 
-    num_of_latent_state = attrs["num_of_latent_state"]
+    pool_type = attrs["pool_type"]
+    pool_size = attrs["pool_size"]
     latent_dim = attrs["latent_dim"]
     stride = attrs["stride"]
     latent_state_shape = attrs["latent_state_shape"]
     bf16 = attrs["bf16"]
+    num_of_latent_state = latent_state_shape[-1]
+
 
     if not bf16:
         f32tobf16 = lambda x : x
@@ -107,35 +119,43 @@ def _compute(attrs, inputs, output_type):
         f32tobf16 = _f32tobf16
         bf16tof32 = _bf16tof32
 
+    if pool_type == "Avg":
+        cell_pool_func = lambda a, b: a + (b / pool_size)
+        output_func = lambda a: tir_op.sum(a)
+    elif pool_type == "Max":
+        cell_pool_func = lambda a, b: tir_op.max(a, b)
+        output_func = lambda a: tir_op.max(a)
+    else:
+        raise NotImplementedError(f"IterativeGlobalPool type: {pool_type} is not supported.")
+
     def gen_ib_4d(data_buf, buffer_var_buf, current_idx_buf, out_buf):
         ib = tvm.tir.ir_builder.create()
         data = ib.buffer_ptr(data_buf)
         buffer = ib.buffer_ptr(buffer_var_buf)
         cur_idx = ib.buffer_ptr(current_idx_buf)
+        _num_cur_pool_filled, _num_cur_cell_filled, _cur_cell_idx = cur_idx[0], cur_idx[1], cur_idx[2],
         out = ib.buffer_ptr(out_buf)
-        #shrift elements inside buffer
-        with ib.for_range(0 , latent_state_shape[0], "n") as n: # begin of for loop has to be zero for c codegen...
-            with ib.for_range(0,  latent_state_shape[1], "i") as i:
-                with ib.for_range(0, latent_state_shape[2], "j") as j:
-                    with ib.for_range(0, latent_state_shape[3] - 1, "k") as k:
-                        buffer[n , i , j , k] = buffer[n, i , j , k + 1]
+
         # Copy new data to buffer
         with ib.for_range(0 , latent_state_shape[0], "n") as n: # begin of for loop has to be zero for c codegen...
             with ib.for_range(0,  latent_state_shape[1], "i") as i:
                 with ib.for_range(0, latent_state_shape[2], "j") as j:
-                    with ib.for_range(0, 1, "k") as k:
-                        buffer[n , i , j , latent_state_shape[3] - 1 - k] = f32tobf16(data[n, i , j , k])
+                    buffer[n , i , j , _cur_cell_idx] = f32tobf16(cell_pool_func(bf16tof32(buffer[n , i , j , _cur_cell_idx]), data[n, i , j , 0]))
 
-        cur_idx[0] = cur_idx[0] + 1
-
-        with ib.if_scope(cur_idx[0] >= num_of_latent_state):
+        _num_cur_cell_filled += 1
+        with ib.if_scope(_num_cur_cell_filled >= stride):
+            _num_cur_cell_filled = 0
+            _cur_cell_idx += 1
+            _cur_cell_idx %= num_of_latent_state
+        
+        _num_cur_pool_filled += 1
+        with ib.if_scope(_num_cur_pool_filled >= pool_size):
             # copy to Output buffer
             with ib.for_range(0 , latent_state_shape[0], "n") as n: # begin of for loop has to be zero for c codegen...
                 with ib.for_range(0,  latent_state_shape[1], "i") as i:
                     with ib.for_range(0, latent_state_shape[2], "j") as j:
-                        with ib.for_range(0, latent_state_shape[3], "k") as k:
-                            out[n , i , j , k] = bf16tof32(buffer[n, i , j , k])
-            cur_idx[0] = cur_idx[0] - stride
+                            out[n , i , j , 0] = bf16tof32(output_func(buffer[n, i , j]))
+            _num_cur_pool_filled = _num_cur_pool_filled - stride
 
         with ib.else_scope():
             # skip output
@@ -147,27 +167,27 @@ def _compute(attrs, inputs, output_type):
         data = ib.buffer_ptr(data_buf)
         buffer = ib.buffer_ptr(buffer_var_buf)
         cur_idx = ib.buffer_ptr(current_idx_buf)
+        _num_cur_pool_filled, _num_cur_cell_filled, _cur_cell_idx = cur_idx[0], cur_idx[1], cur_idx[2],
         out = ib.buffer_ptr(out_buf)
-        #shrift elements inside buffer
-        with ib.for_range(0 , latent_state_shape[0], "n") as n: # begin of for loop has to be zero for c codegen...
-            with ib.for_range(0,  latent_state_shape[1], "i") as i:
-                with ib.for_range(0, latent_state_shape[2] - 1, "k") as k:
-                    buffer[n , i, k] = buffer[n, i, k + 1]
+
         # Copy new data to buffer
         with ib.for_range(0 , latent_state_shape[0], "n") as n: # begin of for loop has to be zero for c codegen...
             with ib.for_range(0,  latent_state_shape[1], "i") as i:
-                with ib.for_range(0, 1, "k") as k:
-                    buffer[n , i , latent_state_shape[2] - 1 - k] = f32tobf16(data[n, i , k])
+                buffer[n , i , _cur_cell_idx] = f32tobf16(cell_pool_func(bf16tof32(buffer[n , i , _cur_cell_idx]), data[n, i , 0]))
 
-        cur_idx[0] = cur_idx[0] + 1
-
-        with ib.if_scope(cur_idx[0] >= num_of_latent_state):
+        _num_cur_cell_filled += 1
+        with ib.if_scope(_num_cur_cell_filled >= stride):
+            _num_cur_cell_filled = 0
+            _cur_cell_idx += 1
+            _cur_cell_idx %= num_of_latent_state
+        
+        _num_cur_pool_filled += 1
+        with ib.if_scope(_num_cur_pool_filled >= pool_size):
             # copy to Output buffer
             with ib.for_range(0 , latent_state_shape[0], "n") as n: # begin of for loop has to be zero for c codegen...
                 with ib.for_range(0,  latent_state_shape[1], "i") as i:
-                    with ib.for_range(0, latent_state_shape[2], "k") as k:
-                        out[n , i , k] = bf16tof32(buffer[n, i , k])
-            cur_idx[0] = cur_idx[0] - stride
+                        out[n , i ,0] = bf16tof32(output_func(buffer[n, i]))
+            _num_cur_pool_filled = _num_cur_pool_filled - stride
 
         with ib.else_scope():
             # skip output
@@ -179,24 +199,25 @@ def _compute(attrs, inputs, output_type):
         data = ib.buffer_ptr(data_buf)
         buffer = ib.buffer_ptr(buffer_var_buf)
         cur_idx = ib.buffer_ptr(current_idx_buf)
+        _num_cur_pool_filled, _num_cur_cell_filled, _cur_cell_idx = cur_idx[0], cur_idx[1], cur_idx[2],
         out = ib.buffer_ptr(out_buf)
-        #shrift elements inside buffer
-        with ib.for_range(0 , latent_state_shape[0], "n") as n: # begin of for loop has to be zero for c codegen...
-            with ib.for_range(0, latent_state_shape[1] - 1, "k") as k:
-                buffer[n , k] = buffer[n, k + 1]
+
         # Copy new data to buffer
         with ib.for_range(0 , latent_state_shape[0], "n") as n: # begin of for loop has to be zero for c codegen...
-            with ib.for_range(0, 1, "k") as k:
-                buffer[n , latent_state_shape[1] - 1 - k] = f32tobf16(data[n, k])
+            buffer[n , _cur_cell_idx] = f32tobf16(cell_pool_func(bf16tof32(buffer[n , _cur_cell_idx]), data[n, 0]))
 
-        cur_idx[0] = cur_idx[0] + 1
-
-        with ib.if_scope(cur_idx[0] >= num_of_latent_state):
+        _num_cur_cell_filled += 1
+        with ib.if_scope(_num_cur_cell_filled >= stride):
+            _num_cur_cell_filled = 0
+            _cur_cell_idx += 1
+            _cur_cell_idx %= num_of_latent_state
+        
+        _num_cur_pool_filled += 1
+        with ib.if_scope(_num_cur_pool_filled >= pool_size):
             # copy to Output buffer
             with ib.for_range(0 , latent_state_shape[0], "n") as n: # begin of for loop has to be zero for c codegen...
-                with ib.for_range(0, latent_state_shape[1], "k") as k:
-                    out[n , k] = bf16tof32(buffer[n, k])
-            cur_idx[0] = cur_idx[0] - stride
+                out[n , 0] = bf16tof32(output_func(buffer[n]))
+            _num_cur_pool_filled = _num_cur_pool_filled - stride
 
         with ib.else_scope():
             # skip output

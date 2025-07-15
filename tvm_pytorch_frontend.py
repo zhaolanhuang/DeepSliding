@@ -14,6 +14,8 @@ import inspect
 from .SSMFakeOperator import SSMFakeOperator
 from .tvm_op.ssm import ssm
 
+from .tvm_op.iterative_global_pool import iterative_global_pool
+
 _BF16 = False
 
 def ssm_fake_op(inputs, input_types):
@@ -24,8 +26,15 @@ def ssm_fake_op(inputs, input_types):
     stride = inputs[3]
     return ssm(data, num_latent_states, latent_dim, stride, _BF16)
 
+def iterative_global_pool_op(inputs, input_types):
+    global _BF16
+    data, pool_type, pool_size, latent_dim, stride = inputs
+    latent_dim = tuple(latent_dim)    
+    return iterative_global_pool(data, pool_type, pool_size, latent_dim, stride, _BF16)
+
 custom_convert_map = {
     "DeepSliding::ssm_fake_op": ssm_fake_op,
+    "DeepSliding::iterative_global_pool_op": iterative_global_pool_op,
 }
 
 def set_bf16(on):

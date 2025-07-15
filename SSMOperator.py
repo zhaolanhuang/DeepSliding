@@ -2,10 +2,7 @@ import torch
 import torch.nn as nn
 from .CircularBuffer import CircularBuffer
 from .BaseSSMOperator import BaseSSMOperator
-
-class WaitForNextInputError(Exception):
-    pass
-
+from .utils import WaitForNextInputError
 
 class SSMOperator(BaseSSMOperator):
     def __init__(self, wrapped_operator: nn.Module, num_of_latent_state, latent_dim, stride):
