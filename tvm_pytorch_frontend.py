@@ -11,9 +11,10 @@ from tvm.driver import tvmc
 from tvm.driver.tvmc.frontends import guess_frontend, PyTorchFrontend
 import inspect
 
-from .SSMFakeOperator import SSMFakeOperator
+from .SSMFakeOperator import SSMFakeOperator # MUST import to dynamically register op in torch
 from .tvm_op.ssm import ssm
 
+from .IterativeGlobalPool import IterativeGlobalPoolFake # MUST import to dynamically register op in torch
 from .tvm_op.iterative_global_pool import iterative_global_pool
 
 _BF16 = False
