@@ -2,10 +2,11 @@
 import torch
 import torch.nn as nn
 
-DEFAULT_INPUT_SHAPE = (64, 256) # (C, T)
-DEFAULT_SLIDING_STEP_SIZE = 1
+
 
 class ToyTCNd1(nn.Module):
+    DEFAULT_INPUT_SHAPE = (64, 256) # (C, T)
+    DEFAULT_SLIDING_STEP_SIZE = 1
     def __init__(self):
         super().__init__()
         self.conv1 = nn.Conv1d(64, 32, kernel_size=3, dilation=1)
@@ -14,6 +15,8 @@ class ToyTCNd1(nn.Module):
         return x
 
 class ToyTCNd2(nn.Module):
+    DEFAULT_INPUT_SHAPE = (64, 256) # (C, T)
+    DEFAULT_SLIDING_STEP_SIZE = 1
     def __init__(self):
         super().__init__()
         self.conv1 = nn.Conv1d(64, 32, kernel_size=3, dilation=2)

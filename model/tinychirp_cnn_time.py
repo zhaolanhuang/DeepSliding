@@ -1,10 +1,10 @@
 import torch
 import torch.nn as nn
 
-DEFAULT_INPUT_SHAPE = (1, 1 ,48000) # (N, C, T), add N=1 for avoid tvm's error on Pool1d
-DEFAULT_SLIDING_STEP_SIZE = 16000
 
 class TinyChirpCNNTime(nn.Module):
+    DEFAULT_INPUT_SHAPE = (1, 1 ,48000) # (N, C, T), add N=1 for avoid tvm's error on Pool1d
+    DEFAULT_SLIDING_STEP_SIZE = 16000
     def __init__(self, channel1=4, channel2=8):
         super().__init__()
 
@@ -30,7 +30,7 @@ class TinyChirpCNNTime(nn.Module):
         return x
     
 if __name__ == "__main__":
-    x = torch.randn(*DEFAULT_INPUT_SHAPE)
+    x = torch.randn(*TinyChirpCNNTime.DEFAULT_INPUT_SHAPE)
     net = TinyChirpCNNTime().eval()
     y = net(x)
     print(y.shape)

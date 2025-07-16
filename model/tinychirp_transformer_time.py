@@ -4,10 +4,11 @@ import torch
 import torch.nn as nn
 from .transformer_basic_blocks import TransformerModel, TransformerBlock
 # from torch.nn.utils import weight_norm
-DEFAULT_INPUT_SHAPE = (1, 1 ,48000) # (N, C, T), add N=1 for avoid tvm's error on Pool1d
-DEFAULT_SLIDING_STEP_SIZE = 16000
+
 
 class TinyChirpTransformerTime(nn.Module):
+    DEFAULT_INPUT_SHAPE = (1, 1 ,48000) # (N, C, T), add N=1 for avoid tvm's error on Pool1d
+    DEFAULT_SLIDING_STEP_SIZE = 16000
     def __init__(self, num_classes=2, n_embd=16, n_head=1, hidden_size=32, n_layers=1):
         super().__init__()
         self.conv1 = nn.Conv1d(1, 16, kernel_size=3)

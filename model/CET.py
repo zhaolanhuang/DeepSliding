@@ -6,8 +6,7 @@ import torch
 import torch.nn as nn
 from .transformer_basic_blocks import TransformerModel
 # from torch.nn.utils import weight_norm
-DEFAULT_INPUT_SHAPE = (1, 18 ,320) # (N, C, T), add N=1 for avoid tvm's error on Pool1d
-DEFAULT_SLIDING_STEP_SIZE = 51
+
 
 #taken from https://github.com/ChristophReich1996/ECG_Classification/blob/main/ecg_classification/model.py
 class Conv1dResidualBlock(nn.Module):
@@ -74,6 +73,8 @@ class Conv1dResidualBlock(nn.Module):
         return self.pooling(output)
 
 class CET_S(nn.Module):
+    DEFAULT_INPUT_SHAPE = (1, 18 ,320) # (N, C, T), add N=1 for avoid tvm's error on Pool1d
+    DEFAULT_SLIDING_STEP_SIZE = 51
     def __init__(self):
         super().__init__()
         self.resnet = Conv1dResidualBlock(18, 1, 5, 1, 2)
@@ -90,6 +91,8 @@ class CET_S(nn.Module):
         return self.fc1(x)
 
 class CET(nn.Module):
+    DEFAULT_INPUT_SHAPE = (1, 18 ,320) # (N, C, T), add N=1 for avoid tvm's error on Pool1d
+    DEFAULT_SLIDING_STEP_SIZE = 51  
     def __init__(self):
         super().__init__()
         self.resnet = Conv1dResidualBlock(18, 1, 5, 1, 2)
@@ -103,6 +106,8 @@ class CET(nn.Module):
         return self.fc1(x)
     
 class CET_VAR(nn.Module):
+    DEFAULT_INPUT_SHAPE = (1, 18 ,320) # (N, C, T), add N=1 for avoid tvm's error on Pool1d
+    DEFAULT_SLIDING_STEP_SIZE = 51
     def __init__(self):
         super().__init__()
         self.resnet = Conv1dResidualBlock(18, 1, 5, 1, 2)
@@ -116,7 +121,7 @@ class CET_VAR(nn.Module):
         return self.fc1(x)
 
 if __name__ == "__main__":
-    x = torch.randn(*DEFAULT_INPUT_SHAPE)
+    x = torch.randn(*CET_S.DEFAULT_INPUT_SHAPE)
     net = CET().eval()
     y = net(x)
     print(y.shape)

@@ -4,9 +4,6 @@
 import torch
 import torch.nn as nn
 
-DEFAULT_INPUT_SHAPE = (1, 14 ,300) # (N, C, T), add N=1 for avoid tvm's error on Pool1d
-DEFAULT_SLIDING_STEP_SIZE = 30
-
 class TEMPONet_blocks(nn.Module):
     def __init__(self, dilation, stride, in_channels, out_channels):
         super().__init__()
@@ -22,7 +19,10 @@ class TEMPONet_blocks(nn.Module):
         return self.avg_pool(x)
 
 class TEMPONet(nn.Module):
+    DEFAULT_INPUT_SHAPE = (1, 14 ,300) # (N, C, T), add N=1 for avoid tvm's error on Pool1d
+    DEFAULT_SLIDING_STEP_SIZE = 30  
     def __init__(self):
+
         super().__init__()
         self.block1 = TEMPONet_blocks(2, 1, 14, 32)
         self.block2 = TEMPONet_blocks(4, 2, 32, 64)
@@ -41,7 +41,7 @@ class TEMPONet(nn.Module):
     
 
 if __name__ == "__main__":
-    x = torch.randn(*DEFAULT_INPUT_SHAPE)
+    x = torch.randn(*TEMPONet.DEFAULT_INPUT_SHAPE)
     net = TEMPONet().eval()
     y = net(x)
     print(y.shape)

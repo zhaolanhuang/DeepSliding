@@ -5,8 +5,6 @@ import torch
 import torch.nn as nn
 from torch.nn.utils import weight_norm
 # Use Nottingham data shape by default
-DEFAULT_INPUT_SHAPE = (1, 88 ,192) # (N, C, T), add N=1 for avoid tvm's error on Pool1d
-DEFAULT_SLIDING_STEP_SIZE = 96
 
 class Chomp1d(nn.Module):
     def __init__(self, chomp_size):
@@ -89,6 +87,8 @@ DROPOUT = 0.25
 
 # Poly Music model
 class ResTCN(nn.Module):
+    DEFAULT_INPUT_SHAPE = (1, 88 ,192) # (N, C, T), add N=1 for avoid tvm's error on Pool1d
+    DEFAULT_SLIDING_STEP_SIZE = 96
     def __init__(self, input_size=INPUT_SIZE, output_size=INPUT_SIZE, 
                  num_channels=N_CHANNELS, kernel_size=KERNEL_SIZE, dropout=DROPOUT):
         super(ResTCN, self).__init__()
@@ -103,7 +103,7 @@ class ResTCN(nn.Module):
         return self.sig(output)
     
 if __name__ == "__main__":
-    x = torch.randn(*DEFAULT_INPUT_SHAPE)
+    x = torch.randn(*ResTCN.DEFAULT_INPUT_SHAPE)
     net = ResTCN().eval()
     y = net(x)
     print(y.shape)

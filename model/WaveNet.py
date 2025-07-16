@@ -6,8 +6,7 @@
 import torch
 import torch.nn as nn
 
-DEFAULT_INPUT_SHAPE = (1, 256, 10000) # (C, T)
-DEFAULT_SLIDING_STEP_SIZE = 1
+
 
 import numpy as np
 
@@ -222,7 +221,9 @@ class DensNet(torch.nn.Module):
 
 
 class WaveNet(torch.nn.Module):
-    def __init__(self, layer_size=10, stack_size=5, in_channels=256, res_channels=512):
+    DEFAULT_INPUT_SHAPE = (1, 256, 10000) # (C, T)
+    DEFAULT_SLIDING_STEP_SIZE = 1
+    def __init__(self, input_shape=DEFAULT_INPUT_SHAPE, layer_size=10, stack_size=5, in_channels=256, res_channels=512):
         """
         Stack residual blocks by layer and stack size
         :param layer_size: integer, 10 = layer[dilation=1, dilation=2, 4, 8, 16, 32, 64, 128, 256, 512]
@@ -241,6 +242,8 @@ class WaveNet(torch.nn.Module):
 
         self.densnet = DensNet(in_channels)
 
+        self.output_size = self.calc_output_size(input_shape)
+
     @staticmethod
     def calc_receptive_fields(layer_size, stack_size):
         layers = [2 ** i for i in range(0, layer_size)] * stack_size
@@ -248,11 +251,12 @@ class WaveNet(torch.nn.Module):
 
         return int(num_receptive_fields)
 
+    #change var x to its shape, avoid error in symbolc trace.
     def calc_output_size(self, x):
         # Origin:
         # output_size = int(x.size(2)) - self.receptive_fields
         # ZL: aligned with adaption of padding
-        output_size = int(x.size(2)) - self.receptive_fields - 1 
+        output_size = int(x[2]) - self.receptive_fields - 1 
 
         self.check_input_size(x, output_size)
 
@@ -260,7 +264,7 @@ class WaveNet(torch.nn.Module):
 
     def check_input_size(self, x, output_size):
         if output_size < 1:
-            raise InputSizeError(int(x.size(2)), self.receptive_fields, output_size)
+            raise InputSizeError(int(x[2]), self.receptive_fields, output_size)
 
     def forward(self, x):
         """
@@ -270,11 +274,11 @@ class WaveNet(torch.nn.Module):
         """
         output = x # ZL: rearrange channels and timestep
 
-        output_size = self.calc_output_size(output)
+        # output_size = self.calc_output_size(output)
 
         output = self.causal(output)
 
-        skip_connections = self.res_stack(output, output_size)
+        skip_connections = self.res_stack(output, self.output_size)
 
         output = torch.sum(skip_connections, dim=0)
 
@@ -285,4 +289,4 @@ class WaveNet(torch.nn.Module):
 
 class TinyWaveNet(WaveNet):
     def __init__(self):
-        super().__init__(layer_size=10, stack_size=5, in_channels=256, res_channels=64)
+        super().__init__(layer_size=9, stack_size=1, in_channels=256, res_channels=32)

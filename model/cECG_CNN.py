@@ -3,10 +3,10 @@
 import torch
 import torch.nn as nn
 # from torch.nn.utils import weight_norm
-DEFAULT_INPUT_SHAPE = (1, 3 ,101) # (N, C, T), add N=1 for avoid tvm's error on Pool1d
-DEFAULT_SLIDING_STEP_SIZE = 51
+
 
 class cECGHeadBlock(nn.Module):
+
     def __init__(self):
         super(cECGHeadBlock, self).__init__()
         self.conv1 = nn.Conv1d(1, 10, 20)
@@ -25,6 +25,8 @@ class cECGHeadBlock(nn.Module):
 
 
 class cECG_CNN(nn.Module):
+    DEFAULT_INPUT_SHAPE = (1, 3 ,101) # (N, C, T), add N=1 for avoid tvm's error on Pool1d
+    DEFAULT_SLIDING_STEP_SIZE = 51
     def __init__(self, input_channels=3):
         super(cECG_CNN, self).__init__()
         # self.input_channels=input_channels
@@ -49,7 +51,7 @@ class cECG_CNN(nn.Module):
         return y
 
 if __name__ == "__main__":
-    x = torch.randn(*DEFAULT_INPUT_SHAPE)
+    x = torch.randn(*cECG_CNN.DEFAULT_INPUT_SHAPE)
     net = cECG_CNN().eval()
     y = net(x)
     print(y.shape)
