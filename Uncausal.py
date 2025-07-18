@@ -79,4 +79,8 @@ def is_uncausal_function(func):
 
 # TODO: Impl
 def is_uncausal_method(method):
+    if method == "transpose": #TODO: temporary fix for ResTCN
+        return True
+    elif method == "squeeze": #TODO: temprorary fix for TinyChirpTime
+        return True
     return False

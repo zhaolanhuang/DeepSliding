@@ -6,7 +6,7 @@ from .GraphAnalyser import GraphAnalyser, SSMMetadata
 
 from .OpsToSSM import ops_to_ssm
 
-from .utils import get_graph_node_by_target, WaitForNextInputError
+from .utils import get_graph_node_by_target, WaitForNextInputError, get_graph_node_by_name
 
 from .SSMOperator import SSMOperator
 
@@ -28,6 +28,8 @@ def is_ssm_able(op_mod):
     if isinstance(op_mod, str):
         return (op_mod in SSMABLE_OP_NAMES)
     elif isinstance(op_mod, nn.Module):
+        if isinstance(op_mod, nn.Conv1d):
+            return not op_mod.kernel_size[0] == 1
         return type(op_mod).__name__ in SSMABLE_OP_NAMES
     else:
         raise TypeError(f"Unreconized module type: {type(op_mod)}")
@@ -56,6 +58,24 @@ class GraphTransformer(fx.Transformer):
         return super().call_function(target, args, kwargs)
     
     def call_method(self, target, args, kwargs):
+        if target == "transpose": # TODO: temporary fix for ResTCN...
+            call_self , *args_tail = args
+            if args_tail[0] == 1 and args_tail[1] ==2:
+                node: fx.Node = get_graph_node_by_name(self._traced_mod.graph, call_self.node.name)
+                out_tensor_meta = node.meta['tensor_meta']
+                ssm_meta : SSMMetadata = node.meta['ssm_meta']
+                in_ts_meta = ssm_meta.tensor_meta_time_step
+                print(out_tensor_meta.shape)
+                # print(ssm_meta)
+                new_ssm_mod = self._ssm_op_cls(nn.Identity(), out_tensor_meta.shape[-1], out_tensor_meta.shape[:-1], 1)
+                if in_ts_meta is not None and (in_ts_meta.shape[-1] <= new_ssm_mod.num_of_latent_state and in_ts_meta.shape[-1] > new_ssm_mod.stride):
+                    print(f"re-set {node.target} stride: {new_ssm_mod.stride} to {in_ts_meta.shape[-1]}")
+                    new_ssm_mod.set_stride(in_ts_meta.shape[-1])
+                
+                new_name = node.name + "_ssm"
+                self._traced_mod.add_submodule(new_name, new_ssm_mod)
+                return new_ssm_mod(call_self).transpose(1,2)
+                
         return super().call_method(target, args, kwargs)
     
     def call_module(self, target: str, args, kwargs):
@@ -97,11 +117,11 @@ class GraphTransformer(fx.Transformer):
                     k = in_tensor_meta.shape[-1] - (op_mod.output_size-1)*stride
                     op_mod = pool_cls(k, stride, 0)
                 new_ssm_mod = self.ops_to_ssm(op_mod, in_tensor_meta.shape)
-                print(node.target, "\t h_n:", new_ssm_mod.num_of_latent_state, "\t stride:", new_ssm_mod.stride)
+                print(node.target, "\t h_n:", new_ssm_mod.num_of_latent_state, "\t stride:", new_ssm_mod.stride, in_tensor_meta.shape)
                 
                 # deal with sliding window
-                if in_ts_meta is not None:
-                    # print(node.target, "\t h_n:", new_ssm_mod.num_of_latent_state, "\t stride:", new_ssm_mod.stride, "\t input time step:", in_ts_meta.shape[-1])
+                if in_ts_meta is not None and ssm_meta.is_causal_breaker:
+                    print(node.target, "\t h_n:", new_ssm_mod.num_of_latent_state, "\t stride:", new_ssm_mod.stride, "\t input time step:", in_ts_meta.shape[-1])
                     if in_ts_meta.shape[-1] <= new_ssm_mod.num_of_latent_state and in_ts_meta.shape[-1] > new_ssm_mod.stride:
                         print(f"re-set {node.target} stride: {new_ssm_mod.stride} to {in_ts_meta.shape[-1]}")
                         new_ssm_mod.set_stride(in_ts_meta.shape[-1])

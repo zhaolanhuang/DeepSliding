@@ -56,7 +56,7 @@ class TemporalBlock(nn.Module):
     def forward(self, x):
         out = self.net(x)
         res = x if self.downsample is None else self.downsample(x)
-        print("out:", out.shape, "res:",res.shape)
+        # print("out:", out.shape, "res:",res.shape)
         return self.relu(out + res)
 
 
@@ -87,8 +87,8 @@ DROPOUT = 0.25
 
 # Poly Music model
 class ResTCN(nn.Module):
-    DEFAULT_INPUT_SHAPE = (1, 88 ,192) # (N, C, T), add N=1 for avoid tvm's error on Pool1d
-    DEFAULT_SLIDING_STEP_SIZE = 96
+    DEFAULT_INPUT_SHAPE = (1, 88 ,33) # (N, C, T), add N=1 for avoid tvm's error on Pool1d
+    DEFAULT_SLIDING_STEP_SIZE = 15
     def __init__(self, input_size=INPUT_SIZE, output_size=INPUT_SIZE, 
                  num_channels=N_CHANNELS, kernel_size=KERNEL_SIZE, dropout=DROPOUT):
         super(ResTCN, self).__init__()
