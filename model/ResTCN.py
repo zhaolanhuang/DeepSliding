@@ -87,7 +87,7 @@ DROPOUT = 0.25
 
 # Poly Music model
 class ResTCN(nn.Module):
-    DEFAULT_INPUT_SHAPE = (1, 88 ,33) # (N, C, T), add N=1 for avoid tvm's error on Pool1d
+    DEFAULT_INPUT_SHAPE = (1, 88 ,192) # (N, C, T), add N=1 for avoid tvm's error on Pool1d # TODO: 33 for DS
     DEFAULT_SLIDING_STEP_SIZE = 15
     def __init__(self, input_size=INPUT_SIZE, output_size=INPUT_SIZE, 
                  num_channels=N_CHANNELS, kernel_size=KERNEL_SIZE, dropout=DROPOUT):

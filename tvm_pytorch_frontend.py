@@ -9,6 +9,7 @@ import tvm.contrib.utils
 from tvm.micro import export_model_library_format
 from tvm.driver import tvmc
 from tvm.driver.tvmc.frontends import guess_frontend, PyTorchFrontend
+from tvm.relay import data_dep_optimization as ddo
 import inspect
 
 from .SSMFakeOperator import SSMFakeOperator # MUST import to dynamically register op in torch
@@ -56,8 +57,11 @@ def load_model(model_path: str, shape_dict=None):
                                 )
     else:
         raise NotImplementedError()
+    
+    mod, params = ddo.simplify_fc_transpose.convert(model.mod["main"], model.params)
     print(model.mod)
-    return model.mod, model.params
+    return mod, params
+    # return model.mod, model.params
 
 if __name__ == "__main__":
     mod, params = load_model('./DeepSliding/torchscrpited_model.pth', {'input': (50, 1)})
