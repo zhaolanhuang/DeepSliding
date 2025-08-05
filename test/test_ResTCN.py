@@ -9,7 +9,7 @@ from ..model.ResTCN import ResTCN
 if __name__ == "__main__":
     x = torch.randn(*ResTCN.DEFAULT_INPUT_SHAPE[:-1], 1)
     ori_mod = ResTCN().eval()
-    graph_analyser = GraphAnalyser(ori_mod, ResTCN.DEFAULT_INPUT_SHAPE, int(ResTCN.DEFAULT_INPUT_SHAPE[-1]*0))
+    graph_analyser = GraphAnalyser(ori_mod, ResTCN.DEFAULT_INPUT_SHAPE, int(ResTCN.DEFAULT_INPUT_SHAPE[-1]*0.9))
     graph_transformer = GraphTransformer(graph_analyser, True)
     new_g = graph_transformer.transform()
     new_g.graph.print_tabular()

@@ -15,8 +15,8 @@ if __name__ == "__main__":
     new_g.graph.print_tabular()
 
     scripted_model = torch.jit.trace(new_g, x, check_trace=True).eval()
-    scripted_model.save("./DeepSliding/test/ssm_tinywavenet.pth")
+    scripted_model.save("./DeepSliding/test/ssm_TinyWaveNet.pth")
 
     x = torch.randn(*TinyWaveNet.DEFAULT_INPUT_SHAPE)
     ori_scripted_model = torch.jit.trace(ori_mod, x, check_trace=True).eval()
-    ori_scripted_model.save("./DeepSliding/test/tinywavenet.pth")
+    ori_scripted_model.save("./DeepSliding/test/TinyWaveNet.pth")
