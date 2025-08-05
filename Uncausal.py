@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 #record torch methods/functions/modules that break the causality
-# TODO: or shall we rename it causal breaker instead?
+
 UNCAUSAL_MODULE_NAMES = [
     
     #MLP on Time axis
@@ -71,16 +71,13 @@ UNCAUSAL_FUNCTION_NAMES = [
 ]
 
 
-
-
-# TODO: Impl
 def is_uncausal_function(func):
     return False
 
-# TODO: Impl
+
 def is_uncausal_method(method):
-    if method == "transpose": #TODO: temporary fix for ResTCN
+    if method == "transpose":
         return True
-    elif method == "squeeze": #TODO: temprorary fix for TinyChirpTime
+    elif method == "squeeze": 
         return True
     return False

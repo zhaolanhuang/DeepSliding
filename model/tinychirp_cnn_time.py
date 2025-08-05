@@ -3,7 +3,7 @@ import torch.nn as nn
 
 
 class TinyChirpCNNTime(nn.Module):
-    DEFAULT_INPUT_SHAPE = (1, 1 ,48000) # (N, C, T), add N=1 for avoid tvm's error on Pool1d
+    DEFAULT_INPUT_SHAPE = (1, 1 ,48000) # (N, C, T)
     DEFAULT_SLIDING_STEP_SIZE = 16000
     def __init__(self, channel1=4, channel2=8):
         super().__init__()

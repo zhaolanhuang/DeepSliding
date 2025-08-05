@@ -113,7 +113,7 @@ class CET_VAR(nn.Module):
         self.resnet = Conv1dResidualBlock(18, 1, 5, 1, 2)
         self.transformer = TransformerModel(num_classes=320, n_embd=320, n_head=1, hidden_size=64, n_layers=4)
         self.fc1 = nn.Linear(320, 2)
-        self.flatten = nn.Flatten(start_dim=1, end_dim=-1) # TODO should work without flatten in future
+        self.flatten = nn.Flatten(start_dim=1, end_dim=-1)
     def forward(self, x):
         x = self.resnet(x)
         x = self.flatten(x)

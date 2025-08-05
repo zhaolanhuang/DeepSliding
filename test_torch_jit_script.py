@@ -29,7 +29,6 @@ if __name__ == "__main__":
         def forward(self, x):
             x = self.conv1(x)
             x2 = self.relu(x)
-            # x = self.called_mod(x2) # TODO: this place cause bug inside tvm, conv1 <-> called_mod.conv1 verwechseln...
             x = self.conv2(x)
             x = self.conv3(x)
             x = self.flatten1(x)

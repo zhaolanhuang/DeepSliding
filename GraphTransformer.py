@@ -92,8 +92,7 @@ class GraphTransformer(fx.Transformer):
 
 
         # causal breaker is also causal
-        # TODO: dont use concept of "causal" cause in time series the whole model is actually causal, use time-accumulative operator instead
-        # TODO: totally a mess, needs refactor if have time...
+
         if (ssm_meta.is_causal or ssm_meta.is_causal_breaker) and is_ssm_able(op_mod):
             in_ts_meta = node.all_input_nodes[0].meta['ssm_meta'].tensor_meta_time_step
             if ssm_meta.is_global_pooling:

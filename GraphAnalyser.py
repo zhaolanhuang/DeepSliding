@@ -20,8 +20,6 @@ class SSMMetadata:
     tensor_meta_time_step: Optional[fx.passes.shape_prop.TensorMetadata]
 
 
-# TODO: suport iteratively analyse customize modules inside the model
-
 
 def find_uncausal_nodes(traced_graph, named_modules):
     nodes = traced_graph.nodes

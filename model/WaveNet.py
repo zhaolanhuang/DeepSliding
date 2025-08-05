@@ -26,10 +26,10 @@ class DilatedCausalConv1d(torch.nn.Module):
         super(DilatedCausalConv1d, self).__init__()
 
         self.conv = torch.nn.Conv1d(channels, channels,
-                                    kernel_size=2, stride=1,  # Fixed for WaveNet
+                                    kernel_size=2, stride=1,  
                                     dilation=dilation,
-                                    padding=0,  # Fixed for WaveNet dilation
-                                    bias=False)  # Fixed for WaveNet but not sure
+                                    padding=0,  
+                                    bias=False) 
 
     def init_weights_for_test(self):
         for m in self.modules():
@@ -47,11 +47,6 @@ class CausalConv1d(torch.nn.Module):
     def __init__(self, in_channels, out_channels):
         super(CausalConv1d, self).__init__()
 
-        # padding=1 for same size(length) between input and output for causal convolution
-        # self.conv = torch.nn.Conv1d(in_channels, out_channels,
-        #                             kernel_size=2, stride=1, padding=1,
-        #                             bias=False)  # Fixed for WaveNet but not sure
-        # ZL: not support padding now
         self.conv = torch.nn.Conv1d(in_channels, out_channels,
                                     kernel_size=2, stride=1,
                                     bias=False)  # Fixed for WaveNet but not sure
@@ -63,10 +58,6 @@ class CausalConv1d(torch.nn.Module):
 
     def forward(self, x):
         output = self.conv(x)
-
-        # remove last value for causal convolution
-        # return output[:, :, :-1]
-        # ZL: not support padding now, adapt
         return output
 
 
@@ -93,10 +84,8 @@ class ResidualBlock(torch.nn.Module):
         :param skip_size: The last output size for loss and prediction
         :return:
         """
-        # print("x:", x.shape)
         output = self.dilated(x)
-        # print("dilation:", self.dilated.conv.dilation)
-        # print("output:", output.shape)
+
         # PixelCNN gate
         gated_tanh = self.gate_tanh(output)
         gated_sigmoid = self.gate_sigmoid(output)
@@ -105,14 +94,11 @@ class ResidualBlock(torch.nn.Module):
         # Residual network
         output = self.conv_res(gated)
         input_cut = x[:, :, -output.size(2):]
-        # print("input_cut:", input_cut.shape)
         output += input_cut
 
         # Skip connection
         skip = self.conv_skip(gated)
-        # print("skip:", skip.shape)
         skip = skip[:, :, -skip_size:]
-        # print("skip after crop:", skip.shape)
         return output, skip
 
 
@@ -137,14 +123,6 @@ class ResidualStack(torch.nn.Module):
     def _residual_block(res_channels, skip_channels, dilation):
         block = ResidualBlock(res_channels, skip_channels, dilation)
 
-
-        # ZL: DISABLE, Only Support CPU now
-        # if torch.cuda.device_count() > 1:
-        #     block = torch.nn.DataParallel(block)
-
-        # if torch.cuda.is_available():
-        #     block.cuda()
-
         return block
 
     def build_dilations(self):
@@ -164,8 +142,6 @@ class ResidualStack(torch.nn.Module):
         :return:
         """
         
-        # res_blocks = []
-        # ZL: small adaption so the res block as submodules
         res_blocks = nn.ModuleList()
         dilations = self.build_dilations()
 
@@ -185,10 +161,9 @@ class ResidualStack(torch.nn.Module):
         skip_connections = []
 
         for res_block in self.res_blocks:
-            # output is the next inputcalc_output_size
+
             output, skip = res_block(output, skip_size)
-            # print("output:", skip.shape)
-            # print("skip:", skip.shape)
+
             skip_connections.append(skip)
 
         return torch.stack(skip_connections)
@@ -253,9 +228,7 @@ class WaveNet(torch.nn.Module):
 
     #change var x to its shape, avoid error in symbolc trace.
     def calc_output_size(self, x):
-        # Origin:
-        # output_size = int(x.size(2)) - self.receptive_fields
-        # ZL: aligned with adaption of padding
+
         output_size = int(x[2]) - self.receptive_fields - 1 
 
         self.check_input_size(x, output_size)
@@ -272,9 +245,7 @@ class WaveNet(torch.nn.Module):
         :param x: Tensor[batch, channels, timestep]
         :return: Tensor[batch, channels, timestep]
         """
-        output = x # ZL: rearrange channels and timestep
-
-        # output_size = self.calc_output_size(output)
+        output = x 
 
         output = self.causal(output)
 

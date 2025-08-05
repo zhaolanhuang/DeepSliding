@@ -74,14 +74,11 @@ class TransformerModel(nn.Module):
     # Class for the transformer model
     def __init__(self, num_classes, n_embd, n_head, hidden_size, n_layers):
         super().__init__()
-        #self.positional_embeddings = nn.Parameter(torch.zeros(1, block_size, n_embd))
-        #self.pos_embedding = PositionalEncoding(n_embd)
         self.blocks = nn.Sequential(*[TransformerBlock(n_embd, n_head, hidden_size) for _ in range(n_layers)])
         self.ln_f = nn.LayerNorm(n_embd)
         self.head = nn.Linear(n_embd, num_classes)  
 
     def forward(self, x):
-        #x = self.token_embedding(x) + self.positional_embeddings
         x = self.blocks(x)
         x = self.ln_f(x)
         logits = self.head(x[...,-1,:])

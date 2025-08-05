@@ -1,1 +1,0 @@
-# [1] T. M. Ingolfsson, X. Wang, M. Hersche, A. Burrello, L. Cavigelli, and L. Benini, “ECG-TCN: Wearable Cardiac Arrhythmia Detection with a Temporal Convolutional Network,” Jun. 14, 2021, arXiv: arXiv:2103.13740. doi: 10.48550/arXiv.2103.13740.
